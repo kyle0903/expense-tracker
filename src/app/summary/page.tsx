@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { Summary, Transaction } from '@/types';
 
 export default function SummaryPage() {
@@ -8,36 +8,55 @@ export default function SummaryPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth() + 1;
+  // 使用 state 管理年月，允許切換
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
+
+  const [year, month] = selectedMonth.split('-').map(Number);
+
+  // 載入資料
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      // 計算該月的日期範圍
+      const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+      const lastDay = new Date(year, month, 0).getDate();
+      const endDate = `${year}-${String(month).padStart(2, '0')}-${lastDay}`;
+
+      const [summaryRes, transactionsRes] = await Promise.all([
+        fetch(`/api/summary?year=${year}&month=${month}`),
+        fetch(`/api/transactions?startDate=${startDate}&endDate=${endDate}`),
+      ]);
+
+      const summaryData = await summaryRes.json();
+      const transactionsData = await transactionsRes.json();
+
+      if (summaryData.success) {
+        setSummary(summaryData.data);
+      }
+      if (transactionsData.success) {
+        setTransactions(transactionsData.data.slice(0, 10)); // 只顯示最近 10 筆
+      }
+    } catch (error) {
+      console.error('Failed to load data:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [year, month]);
 
   useEffect(() => {
-    async function loadData() {
-      try {
-        const [summaryRes, transactionsRes] = await Promise.all([
-          fetch(`/api/summary?year=${year}&month=${month}`),
-          fetch('/api/transactions'),
-        ]);
-
-        const summaryData = await summaryRes.json();
-        const transactionsData = await transactionsRes.json();
-
-        if (summaryData.success) {
-          setSummary(summaryData.data);
-        }
-        if (transactionsData.success) {
-          setTransactions(transactionsData.data.slice(0, 10)); // 只顯示最近 10 筆
-        }
-      } catch (error) {
-        console.error('Failed to load data:', error);
-      } finally {
-        setLoading(false);
-      }
-    }
-
     loadData();
-  }, [year, month]);
+  }, [loadData]);
+
+  // 切換月份
+  const changeMonth = (delta: number) => {
+    const newDate = new Date(year, month - 1 + delta, 1);
+    setSelectedMonth(
+      `${newDate.getFullYear()}-${String(newDate.getMonth() + 1).padStart(2, '0')}`
+    );
+  };
 
   if (loading) {
     return (
@@ -52,7 +71,7 @@ export default function SummaryPage() {
   }
 
   return (
-    <div className="animate-fade-in">
+    <div className="animate-fade-in" style={{ paddingBottom: '80px' }}>
       <header style={{ marginBottom: '24px' }}>
         <h1 style={{ 
           fontSize: '1.5rem', 
@@ -62,14 +81,37 @@ export default function SummaryPage() {
         }}>
           摘要
         </h1>
-        <p style={{ 
-          fontSize: '0.875rem', 
-          color: 'var(--text-secondary)',
-          marginTop: '4px',
-        }}>
-          {year} 年 {month} 月
-        </p>
       </header>
+
+      {/* 月份選擇器 */}
+      <div 
+        className="card"
+        style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'space-between',
+          marginBottom: '20px',
+          padding: '12px 16px',
+        }}
+      >
+        <button
+          onClick={() => changeMonth(-1)}
+          className="btn btn-secondary"
+          style={{ padding: '8px 12px', minWidth: 'auto' }}
+        >
+          ‹
+        </button>
+        <div style={{ fontWeight: 600, fontSize: '1rem' }}>
+          {year} 年 {month} 月
+        </div>
+        <button
+          onClick={() => changeMonth(1)}
+          className="btn btn-secondary"
+          style={{ padding: '8px 12px', minWidth: 'auto' }}
+        >
+          ›
+        </button>
+      </div>
 
       {/* 月度摘要 */}
       <div style={{ 
@@ -229,7 +271,7 @@ export default function SummaryPage() {
           fontWeight: 600,
           marginBottom: '12px',
         }}>
-          近期交易
+          {month} 月交易記錄
         </h2>
         {transactions.length === 0 ? (
           <div style={{ 
@@ -237,7 +279,7 @@ export default function SummaryPage() {
             padding: '30px',
             color: 'var(--text-tertiary)',
           }}>
-            尚無交易記錄
+            本月尚無交易記錄
           </div>
         ) : (
           <div className="card" style={{ padding: 0, overflow: 'hidden' }}>

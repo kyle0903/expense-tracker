@@ -1,9 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import type { Account } from '@/types';
 
 export default function AccountsPage() {
+  const router = useRouter();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -71,7 +73,7 @@ export default function AccountsPage() {
   const totalBalance = accounts.reduce((sum, acc) => sum + (acc.balance || 0), 0);
 
   return (
-    <div className="animate-fade-in">
+    <div className="animate-fade-in" style={{ paddingBottom: '80px' }}>
       <header style={{ marginBottom: '24px' }}>
         <h1 style={{ 
           fontSize: '1.5rem', 
@@ -133,9 +135,11 @@ export default function AccountsPage() {
             <div
               key={account.id}
               className="card animate-fade-in"
+              onClick={() => router.push(`/accounts/${account.id}`)}
               style={{ 
                 marginBottom: '12px',
                 animationDelay: `${index * 50}ms`,
+                cursor: 'pointer',
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>

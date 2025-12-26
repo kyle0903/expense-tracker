@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createTransaction, getTransactions, getSummary } from '@/lib/notion';
+import { createTransaction, getTransactions, updateTransaction, deleteTransaction } from '@/lib/notion';
 import type { Transaction, ApiResponse } from '@/types';
 
 // POST: 新增交易記錄
@@ -48,6 +48,62 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
     return NextResponse.json({
       success: false,
       error: '查詢交易失敗',
+    }, { status: 500 });
+  }
+}
+
+// PUT: 更新交易記錄
+export async function PUT(request: NextRequest): Promise<NextResponse<ApiResponse<{ success: boolean }>>> {
+  try {
+    const body = await request.json();
+    const { id, ...transaction } = body;
+    
+    if (!id) {
+      return NextResponse.json({
+        success: false,
+        error: '缺少交易 ID',
+      }, { status: 400 });
+    }
+
+    await updateTransaction(id, transaction);
+    
+    return NextResponse.json({
+      success: true,
+      data: { success: true },
+    });
+  } catch (error) {
+    console.error('Failed to update transaction:', error);
+    return NextResponse.json({
+      success: false,
+      error: '更新交易失敗',
+    }, { status: 500 });
+  }
+}
+
+// DELETE: 刪除交易記錄
+export async function DELETE(request: NextRequest): Promise<NextResponse<ApiResponse<{ success: boolean }>>> {
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+    
+    if (!id) {
+      return NextResponse.json({
+        success: false,
+        error: '缺少交易 ID',
+      }, { status: 400 });
+    }
+
+    await deleteTransaction(id);
+    
+    return NextResponse.json({
+      success: true,
+      data: { success: true },
+    });
+  } catch (error) {
+    console.error('Failed to delete transaction:', error);
+    return NextResponse.json({
+      success: false,
+      error: '刪除交易失敗',
     }, { status: 500 });
   }
 }

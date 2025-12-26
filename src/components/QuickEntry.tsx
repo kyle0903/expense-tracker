@@ -121,7 +121,7 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
   const selectedAccount = accounts.find((a) => a.name === account);
 
   return (
-    <div className="animate-fade-in">
+    <div className="animate-fade-in" style={{ paddingBottom: '70px' }}>
       {/* 成功提示 */}
       {showSuccess && (
         <div className="success-overlay">
