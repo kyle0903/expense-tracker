@@ -1,0 +1,523 @@
+@import "tailwindcss";
+
+/* ============================================
+   設計系統 - Notion 風格個人記帳工具
+   ============================================ */
+
+:root {
+  /* 中性背景 */
+  --bg-primary: #ffffff;
+  --bg-secondary: #f7f6f3;
+  --bg-tertiary: #f0efeb;
+  --bg-hover: rgba(55, 53, 47, 0.04);
+  --bg-active: rgba(55, 53, 47, 0.08);
+
+  /* 文字色 - Notion 標準 */
+  --text-primary: #37352f;
+  --text-secondary: #6b6b6b;
+  --text-tertiary: #9b9b9b;
+  --text-placeholder: #c7c7c7;
+
+  /* 邊框 */
+  --border-light: rgba(55, 53, 47, 0.09);
+  --border-medium: rgba(55, 53, 47, 0.16);
+
+  /* 語義色 - 低飽和暖色調 */
+  --color-income: #4d9375;
+  --color-income-bg: rgba(77, 147, 117, 0.1);
+  --color-expense: #c26d5e;
+  --color-expense-bg: rgba(194, 109, 94, 0.1);
+  --color-accent: #6b8aab;
+  --color-accent-bg: rgba(107, 138, 171, 0.1);
+
+  /* 分類色 - 低飽和 */
+  --cat-food: #d9a066;
+  --cat-transport: #7eb5d6;
+  --cat-shopping: #c490bf;
+  --cat-housing: #8ab17d;
+  --cat-entertainment: #e8b4b4;
+  --cat-medical: #9dc5bb;
+  --cat-education: #b8a9c9;
+  --cat-other: #a8a8a8;
+
+  /* 動畫 - Apple 風格 */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --duration-fast: 150ms;
+  --duration-normal: 250ms;
+  --duration-slow: 400ms;
+
+  /* 圓角 */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  /* 陰影 - 極淡 */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+/* 深色模式 */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-primary: #191919;
+    --bg-secondary: #202020;
+    --bg-tertiary: #2a2a2a;
+    --bg-hover: rgba(255, 255, 255, 0.04);
+    --bg-active: rgba(255, 255, 255, 0.08);
+
+    --text-primary: #e8e8e8;
+    --text-secondary: #9b9b9b;
+    --text-tertiary: #6b6b6b;
+    --text-placeholder: #4a4a4a;
+
+    --border-light: rgba(255, 255, 255, 0.09);
+    --border-medium: rgba(255, 255, 255, 0.16);
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+    --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.3);
+    --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.4);
+  }
+}
+
+@theme inline {
+  --color-background: var(--bg-primary);
+  --color-foreground: var(--text-primary);
+  --font-sans: "Inter", "Noto Sans TC", -apple-system, BlinkMacSystemFont,
+    sans-serif;
+}
+
+/* ============================================
+   基礎樣式
+   ============================================ */
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: "Inter", "Noto Sans TC", -apple-system, BlinkMacSystemFont,
+    sans-serif;
+  line-height: 1.6;
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* ============================================
+   元件樣式
+   ============================================ */
+
+/* 輸入框 */
+.input {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 0.9375rem;
+  transition: border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.input::placeholder {
+  color: var(--text-placeholder);
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-bg);
+}
+
+/* 按鈕 */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.btn-primary {
+  background: var(--text-primary);
+  color: var(--bg-primary);
+}
+
+.btn-primary:hover {
+  opacity: 0.85;
+}
+
+.btn-primary:active {
+  transform: scale(0.98);
+}
+
+.btn-secondary {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-light);
+}
+
+.btn-secondary:hover {
+  background: var(--bg-tertiary);
+}
+
+/* 卡片 */
+.card {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  transition: box-shadow var(--duration-normal) var(--ease-out);
+}
+
+.card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+/* 標籤 */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 100px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.tag:hover {
+  opacity: 0.8;
+}
+
+/* 金額顯示 */
+.amount {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.amount-income {
+  color: var(--color-income);
+}
+
+.amount-expense {
+  color: var(--color-expense);
+}
+
+/* ============================================
+   佈局樣式
+   ============================================ */
+
+.container {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+@media (min-width: 768px) {
+  .container {
+    max-width: 640px;
+    padding: 0 24px;
+  }
+}
+
+/* 底部導航 */
+.nav-bottom {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--bg-primary);
+  border-top: 1px solid var(--border-light);
+  padding: 8px 0;
+  padding-bottom: max(8px, env(safe-area-inset-bottom));
+  z-index: 100;
+}
+
+.nav-bottom-inner {
+  display: flex;
+  justify-content: space-around;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 16px;
+  color: var(--text-tertiary);
+  text-decoration: none;
+  font-size: 0.6875rem;
+  border-radius: var(--radius-md);
+  transition: all var(--duration-fast) var(--ease-out);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.nav-item:hover {
+  color: var(--text-secondary);
+  background: var(--bg-hover);
+}
+
+.nav-item.active {
+  color: var(--text-primary);
+}
+
+.nav-item-icon {
+  font-size: 1.5rem;
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.nav-item:active .nav-item-icon {
+  transform: scale(0.9);
+}
+
+/* ============================================
+   動畫
+   ============================================ */
+
+/* 淡入效果 */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn var(--duration-normal) var(--ease-out);
+}
+
+/* 成功打勾動畫 */
+@keyframes checkmark {
+  0% {
+    stroke-dashoffset: 100;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+.animate-check {
+  stroke-dasharray: 100;
+  animation: checkmark var(--duration-slow) var(--ease-out) forwards;
+}
+
+/* 數字滾動效果 */
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slideUp var(--duration-normal) var(--ease-out);
+}
+
+/* 微妙的脈動效果（成功回饋用） */
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.animate-pulse-subtle {
+  animation: pulse 0.6s var(--ease-in-out);
+}
+
+/* ============================================
+   分類色彩
+   ============================================ */
+
+.cat-food {
+  background: color-mix(in srgb, var(--cat-food) 15%, transparent);
+  color: var(--cat-food);
+}
+.cat-transport {
+  background: color-mix(in srgb, var(--cat-transport) 15%, transparent);
+  color: var(--cat-transport);
+}
+.cat-shopping {
+  background: color-mix(in srgb, var(--cat-shopping) 15%, transparent);
+  color: var(--cat-shopping);
+}
+.cat-housing {
+  background: color-mix(in srgb, var(--cat-housing) 15%, transparent);
+  color: var(--cat-housing);
+}
+.cat-entertainment {
+  background: color-mix(in srgb, var(--cat-entertainment) 15%, transparent);
+  color: var(--cat-entertainment);
+}
+.cat-medical {
+  background: color-mix(in srgb, var(--cat-medical) 15%, transparent);
+  color: var(--cat-medical);
+}
+.cat-education {
+  background: color-mix(in srgb, var(--cat-education) 15%, transparent);
+  color: var(--cat-education);
+}
+.cat-other {
+  background: color-mix(in srgb, var(--cat-other) 15%, transparent);
+  color: var(--cat-other);
+}
+
+/* ============================================
+   頁面內容區域
+   ============================================ */
+
+.page-content {
+  padding-top: 16px;
+  padding-bottom: calc(80px + env(safe-area-inset-bottom));
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* ============================================
+   快速記帳表單
+   ============================================ */
+
+.amount-display {
+  font-size: 3rem;
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  padding: 24px 0;
+  letter-spacing: -0.02em;
+}
+
+.amount-display.has-value {
+  color: var(--text-primary);
+}
+
+.amount-display.no-value {
+  color: var(--text-placeholder);
+}
+
+.category-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.category-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 8px;
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.category-item:hover {
+  background: var(--bg-tertiary);
+}
+
+.category-item.selected {
+  background: var(--color-accent-bg);
+  border-color: var(--color-accent);
+}
+
+.category-item-icon {
+  font-size: 1.5rem;
+}
+
+.category-item-name {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+/* 帳戶選擇器 */
+.account-selector {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.account-selector:hover {
+  background: var(--bg-tertiary);
+}
+
+.account-icon {
+  font-size: 1.25rem;
+}
+
+.account-info {
+  flex: 1;
+}
+
+.account-name {
+  font-weight: 500;
+}
+
+.account-balance {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+/* 成功提示 */
+.success-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.9);
+  z-index: 200;
+}
+
+@media (prefers-color-scheme: dark) {
+  .success-overlay {
+    background: rgba(25, 25, 25, 0.9);
+  }
+}
+
+.success-icon {
+  width: 80px;
+  height: 80px;
+  color: var(--color-income);
+}
