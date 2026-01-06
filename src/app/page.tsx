@@ -10,7 +10,7 @@ export default function HomePage() {
           color: 'var(--text-primary)',
           margin: 0,
         }}>
-          記帳
+          Notion記帳
         </h1>
         <p style={{ 
           fontSize: '0.875rem', 

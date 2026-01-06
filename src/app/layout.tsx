@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "記帳",
+  title: "Notion記帳",
   description: "個人記帳工具 — 與 Notion 連動",
 };
 
