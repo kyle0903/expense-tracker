@@ -3,10 +3,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Summary, Transaction } from '@/types';
 
+type CategoryTab = 'expense' | 'income';
+type TransactionFilter = 'all' | 'expense' | 'income';
+
 export default function SummaryPage() {
   const [summary, setSummary] = useState<{ monthly: Summary; yearly: Summary } | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [categoryTab, setCategoryTab] = useState<CategoryTab>('expense');
+  const [transactionFilter, setTransactionFilter] = useState<TransactionFilter>('all');
 
   // 使用 state 管理年月，允許切換
   const [selectedMonth, setSelectedMonth] = useState(() => {
@@ -37,7 +42,7 @@ export default function SummaryPage() {
         setSummary(summaryData.data);
       }
       if (transactionsData.success) {
-        setTransactions(transactionsData.data.slice(0, 10)); // 只顯示最近 10 筆
+        setTransactions(transactionsData.data.slice(0, 20)); // 顯示最近 20 筆
       }
     } catch (error) {
       console.error('Failed to load data:', error);
@@ -58,6 +63,15 @@ export default function SummaryPage() {
     );
   };
 
+  // 篩選後的交易記錄
+  const filteredTransactions = transactions.filter(tx => {
+    if (tx.category === '轉帳') return false; // 排除轉帳
+    if (transactionFilter === 'all') return true;
+    if (transactionFilter === 'expense') return tx.amount < 0;
+    if (transactionFilter === 'income') return tx.amount > 0;
+    return true;
+  });
+
   if (loading) {
     return (
       <div style={{ 
@@ -69,6 +83,14 @@ export default function SummaryPage() {
       </div>
     );
   }
+
+  // 獲取當前 Tab 的分類統計
+  const currentCategoryData = categoryTab === 'expense' 
+    ? summary?.monthly.byCategoryExpense 
+    : summary?.monthly.byCategoryIncome;
+  const currentTotal = categoryTab === 'expense' 
+    ? summary?.monthly.totalExpense 
+    : summary?.monthly.totalIncome;
 
   return (
     <div className="animate-fade-in" style={{ paddingBottom: '80px' }}>
@@ -201,20 +223,49 @@ export default function SummaryPage() {
       </div>
 
       {/* 分類統計 */}
-      {summary?.monthly.byCategory && Object.keys(summary.monthly.byCategory).length > 0 && (
-        <div style={{ marginBottom: '24px' }}>
-          <h2 style={{ 
-            fontSize: '0.875rem', 
-            fontWeight: 600,
-            marginBottom: '12px',
-          }}>
-            分類統計
-          </h2>
+      <div style={{ marginBottom: '24px' }}>
+        <h2 style={{ 
+          fontSize: '0.875rem', 
+          fontWeight: 600,
+          marginBottom: '12px',
+        }}>
+          分類統計
+        </h2>
+        
+        {/* Tab 切換 */}
+        <div style={{ 
+          display: 'flex', 
+          gap: '8px',
+          marginBottom: '12px',
+        }}>
+          <button
+            onClick={() => setCategoryTab('expense')}
+            className={`btn ${categoryTab === 'expense' ? 'btn-primary' : 'btn-secondary'}`}
+            style={{ 
+              flex: 1,
+              padding: '8px 16px',
+            }}
+          >
+            支出
+          </button>
+          <button
+            onClick={() => setCategoryTab('income')}
+            className={`btn ${categoryTab === 'income' ? 'btn-primary' : 'btn-secondary'}`}
+            style={{ 
+              flex: 1,
+              padding: '8px 16px',
+            }}
+          >
+            收入
+          </button>
+        </div>
+
+        {currentCategoryData && Object.keys(currentCategoryData).length > 0 ? (
           <div className="card" style={{ padding: '12px' }}>
-            {Object.entries(summary.monthly.byCategory)
+            {Object.entries(currentCategoryData)
               .sort(([, a], [, b]) => b - a)
               .map(([category, amount]) => {
-                const percentage = (amount / summary.monthly.totalExpense) * 100;
+                const percentage = currentTotal ? (amount / currentTotal) * 100 : 0;
                 return (
                   <div 
                     key={category}
@@ -238,7 +289,9 @@ export default function SummaryPage() {
                           style={{ 
                             height: '100%',
                             width: `${Math.min(percentage, 100)}%`,
-                            background: 'var(--color-accent)',
+                            background: categoryTab === 'expense' 
+                              ? 'var(--color-expense)' 
+                              : 'var(--color-income)',
                             borderRadius: '2px',
                             transition: 'width 0.5s var(--ease-out)',
                           }}
@@ -249,7 +302,9 @@ export default function SummaryPage() {
                       marginLeft: '16px',
                       textAlign: 'right',
                     }}>
-                      <div className="amount">${amount.toLocaleString()}</div>
+                      <div className={`amount ${categoryTab === 'expense' ? 'amount-expense' : 'amount-income'}`}>
+                        {categoryTab === 'expense' ? '-' : '+'}${amount.toLocaleString()}
+                      </div>
                       <div style={{ 
                         fontSize: '0.75rem', 
                         color: 'var(--text-secondary)',
@@ -261,8 +316,19 @@ export default function SummaryPage() {
                 );
               })}
           </div>
-        </div>
-      )}
+        ) : (
+          <div 
+            className="card"
+            style={{ 
+              textAlign: 'center', 
+              padding: '30px',
+              color: 'var(--text-tertiary)',
+            }}
+          >
+            本月尚無{categoryTab === 'expense' ? '支出' : '收入'}記錄
+          </div>
+        )}
+      </div>
 
       {/* 近期交易 */}
       <div>
@@ -273,24 +339,68 @@ export default function SummaryPage() {
         }}>
           {month} 月交易記錄
         </h2>
-        {transactions.length === 0 ? (
+
+        {/* 篩選按鈕 */}
+        <div style={{ 
+          display: 'flex', 
+          gap: '8px',
+          marginBottom: '12px',
+        }}>
+          <button
+            onClick={() => setTransactionFilter('all')}
+            className={`btn ${transactionFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+            style={{ 
+              flex: 1,
+              padding: '8px 12px',
+              fontSize: '0.8125rem',
+            }}
+          >
+            全部
+          </button>
+          <button
+            onClick={() => setTransactionFilter('expense')}
+            className={`btn ${transactionFilter === 'expense' ? 'btn-primary' : 'btn-secondary'}`}
+            style={{ 
+              flex: 1,
+              padding: '8px 12px',
+              fontSize: '0.8125rem',
+            }}
+          >
+            支出
+          </button>
+          <button
+            onClick={() => setTransactionFilter('income')}
+            className={`btn ${transactionFilter === 'income' ? 'btn-primary' : 'btn-secondary'}`}
+            style={{ 
+              flex: 1,
+              padding: '8px 12px',
+              fontSize: '0.8125rem',
+            }}
+          >
+            收入
+          </button>
+        </div>
+
+        {filteredTransactions.length === 0 ? (
           <div style={{ 
             textAlign: 'center', 
             padding: '30px',
             color: 'var(--text-tertiary)',
           }}>
-            本月尚無交易記錄
+            {transactionFilter === 'all' 
+              ? '本月尚無交易記錄' 
+              : `本月尚無${transactionFilter === 'expense' ? '支出' : '收入'}記錄`}
           </div>
         ) : (
           <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-            {transactions.map((tx, index) => (
+            {filteredTransactions.map((tx, index) => (
               <div
                 key={tx.id || index}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   padding: '12px 16px',
-                  borderBottom: index < transactions.length - 1 ? '1px solid var(--border-light)' : 'none',
+                  borderBottom: index < filteredTransactions.length - 1 ? '1px solid var(--border-light)' : 'none',
                 }}
               >
                 <div style={{ flex: 1 }}>
@@ -316,3 +426,4 @@ export default function SummaryPage() {
     </div>
   );
 }
+

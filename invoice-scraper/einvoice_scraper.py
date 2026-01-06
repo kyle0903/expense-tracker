@@ -102,7 +102,7 @@ class EInvoiceScraper:
             '''
         })
 
-        print("Chrome WebDriver 初始化成功")
+
 
     def _recognize_captcha(self, captcha_element) -> str:
         """
@@ -150,11 +150,9 @@ class EInvoiceScraper:
             # 只保留數字
             result = re.sub(r'[^0-9]', '', result)
             
-            print(f"驗證碼辨識結果: {result}")
             return result
             
-        except Exception as e:
-            print(f"OpenAI 辨識失敗: {e}")
+        except Exception:
             return ""
 
     def _click_login_button(self):
@@ -183,17 +181,14 @@ class EInvoiceScraper:
                         continue
 
                     element.click()
-                    print("已點擊登入按鈕")
                     time.sleep(2)
                     return True
                 except:
                     continue
 
-            print("找不到登入按鈕，可能已在登入頁面")
             return False
 
-        except Exception as e:
-            print(f"點擊登入按鈕失敗: {e}")
+        except Exception:
             return False
 
     def login(self, max_retries: int = 3) -> bool:
@@ -209,18 +204,13 @@ class EInvoiceScraper:
         self._init_driver()
 
         # 前往「手機條碼發票查詢」頁面，會自動導向登入
-        print(f"正在前往手機條碼發票查詢頁面...")
         self.driver.get(self.MOBILE_CARRIER_URL)
         time.sleep(3)
-
-        # 等待頁面載入，可能會跳轉到登入頁面
-        print(f"當前網址: {self.driver.current_url}")
 
         wait = WebDriverWait(self.driver, 15)
 
         for attempt in range(max_retries):
             try:
-                print(f"\n登入嘗試 {attempt + 1}/{max_retries}")
 
                 # 等待登入表單載入
                 # 尋找手機號碼輸入框 (id="mobile_phone")
@@ -249,12 +239,10 @@ class EInvoiceScraper:
                 # 清空並輸入手機號碼
                 phone_input.clear()
                 phone_input.send_keys(self.phone)
-                print(f"已輸入手機號碼: {self.phone[:4]}****{self.phone[-2:]}")
 
                 # 清空並輸入密碼
                 password_input.clear()
                 password_input.send_keys(self.password)
-                print("已輸入密碼")
 
                 # 等待驗證碼圖片載入
                 time.sleep(1)
@@ -263,7 +251,6 @@ class EInvoiceScraper:
                 captcha_text = self._recognize_captcha(captcha_img)
 
                 if len(captcha_text) != 5:
-                    print(f"驗證碼長度不正確 ({len(captcha_text)}), 刷新重試...")
                     # 點擊更新驗證碼按鈕
                     refresh_captcha_btn.click()
                     time.sleep(1)
@@ -272,7 +259,6 @@ class EInvoiceScraper:
                 # 輸入驗證碼
                 captcha_input.clear()
                 captcha_input.send_keys(captcha_text)
-                print(f"已輸入驗證碼: {captcha_text}")
 
                 # 尋找並點擊登入按鈕 (在 ul.login_list 裡面)
                 submit_btn = self.driver.find_element(
@@ -280,7 +266,6 @@ class EInvoiceScraper:
                     "//ul[@class='login_list']//button | //button[contains(text(), '登入')] | //form//button[@type='submit']"
                 )
                 submit_btn.click()
-                print("已點擊登入按鈕")
 
                 # 等待登入結果
                 time.sleep(3)
@@ -294,7 +279,6 @@ class EInvoiceScraper:
                         By.XPATH,
                         "//*[contains(text(), '驗證碼錯誤') or contains(text(), '登入失敗') or contains(text(), '密碼錯誤')]"
                     )
-                    print(f"登入失敗: {error_msg.text}")
 
                     # 刷新驗證碼重試
                     try:
@@ -314,35 +298,29 @@ class EInvoiceScraper:
 
                 # 檢查是否已離開登入頁面
                 if 'login' not in current_url.lower():
-                    print("登入成功！")
                     self._save_session()
                     return True
 
                 # 額外檢查：尋找登出按鈕
                 try:
                     self.driver.find_element(By.XPATH, "//*[contains(text(), '登出')]")
-                    print("登入成功！")
                     self._save_session()
                     return True
                 except:
                     pass
 
             except TimeoutException:
-                print("頁面載入超時，重試中...")
                 self.driver.refresh()
                 time.sleep(2)
 
-            except Exception as e:
-                print(f"登入過程發生錯誤: {e}")
-
-        print("登入失敗，已達最大重試次數")
+            except Exception:
+                pass
         return False
 
     def _save_session(self):
         """登入成功後保存 session (cookies + JWT token)"""
         # 取得所有 cookies
         self.cookies = {cookie['name']: cookie['value'] for cookie in self.driver.get_cookies()}
-        print(f"已取得 {len(self.cookies)} 個 cookies")
 
         # 嘗試從 localStorage/sessionStorage 取得 JWT token
         try:
@@ -361,37 +339,22 @@ class EInvoiceScraper:
                 for key in token_keys:
                     if key in storage:
                         self.auth_token = storage[key]
-                        print(f"已取得 JWT token (from {storage_name}.{key})")
                         break
                     # 也檢查包含這些關鍵字的 key
                     for k, v in storage.items():
                         if any(tk in k.lower() for tk in ['token', 'jwt', 'auth']):
                             if isinstance(v, str) and len(v) > 50:  # JWT 通常很長
                                 self.auth_token = v
-                                print(f"已取得 JWT token (from {storage_name}.{k})")
                                 break
                 if self.auth_token:
                     break
 
-            if not self.auth_token:
-                print(f"警告: 未找到 JWT token")
-                print(f"localStorage keys: {list(local_storage.keys())}")
-                print(f"sessionStorage keys: {list(session_storage.keys())}")
-                # 印出可能的 token 值供除錯
-                for storage_name, storage in [('localStorage', local_storage), ('sessionStorage', session_storage)]:
-                    for k, v in storage.items():
-                        if isinstance(v, str) and len(v) > 20:
-                            print(f"  {storage_name}.{k}: {v[:50]}...")
-
-        except Exception as e:
-            print(f"取得 JWT token 失敗: {e}")
-            import traceback
-            traceback.print_exc()
+        except Exception:
+            pass
 
         # 關閉瀏覽器，後續使用 requests
         self.driver.quit()
         self.driver = None
-        print("已關閉瀏覽器，後續將使用 requests")
 
     def get_invoices(self, months: int = 3) -> List[Invoice]:
         """
@@ -408,7 +371,7 @@ class EInvoiceScraper:
         if not self.cookies:
             raise Exception("尚未登入，請先呼叫 login()")
 
-        print(f"\n正在查詢最近 {months} 個月的發票...")
+
 
         invoices = []
 
@@ -433,9 +396,6 @@ class EInvoiceScraper:
         # 加入 JWT Authorization header
         if self.auth_token:
             headers['Authorization'] = f'Bearer {self.auth_token}'
-            print(f"使用 JWT token 進行 API 認證")
-        else:
-            print("警告: 沒有 JWT token，API 可能會返回 401")
 
         # 請求 payload (日期格式: ISO 8601 UTC 格式，結尾為 Z)
         # API 查詢區間限制較嚴格，使用當月1日到今天
@@ -448,7 +408,7 @@ class EInvoiceScraper:
             "searchEndDate": end_date.strftime('%Y-%m-%dT%H:%M:%S.000Z')
         }
         
-        print(f"查詢區間: {start_date.strftime('%Y-%m-%d')} ~ {end_date.strftime('%Y-%m-%d')}")
+
 
         try:
             # 第一步：呼叫 API 取得查詢用的 JWT token
@@ -460,11 +420,10 @@ class EInvoiceScraper:
                 timeout=30
             )
 
-            print(f"API 回應狀態: {response.status_code}")
+
 
             if response.status_code == 200 and response.text:
                 jwt_token = response.text.strip()
-                print(f"取得查詢 JWT token: {jwt_token[:80]}...")
                 
                 # 第二步：使用 token 作為 payload 呼叫 searchCarrierInvoice
                 search_url = "https://service-mc.einvoice.nat.gov.tw/btc/cloud/api/btc502w/searchCarrierInvoice"
@@ -489,8 +448,7 @@ class EInvoiceScraper:
                     timeout=30
                 )
                 
-                print(f"發票列表 API 回應狀態: {search_response.status_code}")
-                print(f"發票列表回應: {search_response.text[:500] if search_response.text else '(空)'}")
+
                 
                 if search_response.status_code == 200 and search_response.text:
                     data = search_response.json()
@@ -499,7 +457,6 @@ class EInvoiceScraper:
                     invoice_list = data.get('content', [])
                     
                     if isinstance(invoice_list, list) and len(invoice_list) > 0:
-                        print(f"共找到 {len(invoice_list)} 筆發票")
                         for item in invoice_list:
                             # 取得發票的 token 來查詢明細
                             invoice_token = item.get('token', '')
@@ -529,23 +486,10 @@ class EInvoiceScraper:
                                 details=details
                             )
                             invoices.append(invoice)
-                            print(f"  ✓ {invoice.invoice_date} | {invoice.seller_name[:15]:15} | ${invoice.amount:>6}")
-                            if details:
-                                print(f"  明細: {details[:50]}...")
-                    else:
-                        print(f"沒有找到發票")
-                        print(f"完整回應: {json.dumps(data, ensure_ascii=False, indent=2)[:1000]}")
-                else:
-                    print(f"發票列表 API 請求失敗: {search_response.status_code}")
 
-            else:
-                print(f"API 請求失敗: {response.status_code}")
-                print(f"回應內容: {response.text[:500] if response.text else '(空)'}")
 
-        except Exception as e:
-            print(f"取得發票列表失敗: {e}")
-            import traceback
-            traceback.print_exc()
+        except Exception:
+            pass
 
         return invoices
     
@@ -587,12 +531,9 @@ class EInvoiceScraper:
                         details_list.append(f"{item_name} x{quantity} ${amount}")
                     
                     return "\n".join(details_list)
-            else:
-                print("response", response.text)
-                return None
                     
-        except Exception as e:
-            print(f"取得明細失敗: {e}")
+        except Exception:
+            pass
         
         return None
 
@@ -669,14 +610,8 @@ class EInvoiceScraper:
                         amount=amount,
                         details=details_str
                     )
-                else:
-                    print(f"API 回應錯誤: {data.get('message', data)}")
-
-            else:
-                print(f"API 請求失敗: {response.status_code}")
-
-        except Exception as e:
-            print(f"API 請求異常: {e}")
+        except Exception:
+            pass
 
         return None
 
@@ -685,7 +620,6 @@ class EInvoiceScraper:
         """關閉瀏覽器"""
         if self.driver:
             self.driver.quit()
-            print("瀏覽器已關閉")
 
 
 def main():
@@ -696,13 +630,9 @@ def main():
     password = os.getenv('EINVOICE_PASSWORD')
 
     if not phone or not password:
-        print("請設定環境變數:")
-        print("  EINVOICE_PHONE=你的手機號碼")
-        print("  EINVOICE_PASSWORD=你的密碼")
-        print("\n或建立 .env 檔案")
         sys.exit(1)
 
-    print("=== 財政部電子發票爬蟲 ===\n")
+
 
     scraper = EInvoiceScraper(
         phone=phone,
@@ -713,15 +643,12 @@ def main():
     try:
         # 登入
         if not scraper.login():
-            print("登入失敗，程式結束")
             sys.exit(1)
 
         # 取得發票
         invoices = scraper.get_invoices(months=1)
 
-        print(f"\n{'='*50}")
-        print(f"共取得 {len(invoices)} 筆發票")
-        print('='*50)
+
 
         # 轉換為 JSON 格式
         result = []
@@ -737,10 +664,8 @@ def main():
         # 輸出 JSON
         print(json.dumps(result, ensure_ascii=False, indent=2))
 
-    except Exception as e:
-        print(f"\n發生錯誤: {e}")
-        import traceback
-        traceback.print_exc()
+    except Exception:
+        pass
 
     finally:
         scraper.close()

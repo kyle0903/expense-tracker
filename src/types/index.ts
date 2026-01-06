@@ -37,7 +37,9 @@ export interface Summary {
   totalIncome: number;
   totalExpense: number;
   balance: number;
-  byCategory: Record<string, number>;
+  byCategory: Record<string, number>; // 保留向後兼容
+  byCategoryExpense: Record<string, number>; // 支出分類統計
+  byCategoryIncome: Record<string, number>; // 收入分類統計
 }
 
 // API 回應

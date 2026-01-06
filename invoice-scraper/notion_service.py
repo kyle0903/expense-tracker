@@ -97,8 +97,7 @@ class NotionService:
                 }
             )
             return len(results) > 0
-        except Exception as e:
-            print(f"檢查發票是否存在失敗: {e}")
+        except Exception:
             return False
 
     def get_invoices_for_month(self, year: int = None, month: int = None) -> list:
@@ -116,8 +115,6 @@ class NotionService:
             end_date = f"{year + 1}-01-01"
         else:
             end_date = f"{year}-{month + 1:02d}-01"
-
-        print(f"查詢發票: {start_date} ~ {end_date}")
 
         # 查詢該月份有發票號碼的記錄
         url = f"{self.BASE_URL}/databases/{self.transactions_db_id}/query"
@@ -147,13 +144,11 @@ class NotionService:
         }
 
         response = requests.post(url, headers=self.headers, json=payload)
-        print(f"Notion API 回應: {response.status_code}")
 
         if response.status_code != 200:
             raise Exception(f"Notion API 錯誤: {response.status_code} - {response.text}")
 
         results = response.json().get("results", [])
-        print(f"找到 {len(results)} 筆記錄")
 
         # 解析結果
         invoices = []
@@ -252,12 +247,9 @@ class NotionService:
 if __name__ == "__main__":
     # 測試連線
     service = NotionService()
-    print("Notion 連線成功")
-    print(f"交易資料庫 ID: {service.transactions_db_id}")
     
     # 測試取得帳戶
     try:
         account_id = service.get_account_id("Unicard")
-        print(f"Unicard帳戶 ID: {account_id}")
-    except Exception as e:
-        print(f"取得帳戶失敗: {e}")
+    except Exception:
+        pass

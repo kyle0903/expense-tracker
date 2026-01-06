@@ -201,6 +201,8 @@ export async function getSummary(year: number, month?: number): Promise<Summary>
   let totalIncome = 0;
   let totalExpense = 0;
   const byCategory: Record<string, number> = {};
+  const byCategoryExpense: Record<string, number> = {};
+  const byCategoryIncome: Record<string, number> = {};
 
   for (const tx of transactions) {
     // 排除轉帳交易，不計入收支摘要
@@ -210,10 +212,19 @@ export async function getSummary(year: number, month?: number): Promise<Summary>
 
     if (tx.amount > 0) {
       totalIncome += tx.amount;
+      // 收入分類統計
+      if (tx.category) {
+        byCategoryIncome[tx.category] = (byCategoryIncome[tx.category] || 0) + tx.amount;
+      }
     } else {
       totalExpense += Math.abs(tx.amount);
+      // 支出分類統計
+      if (tx.category) {
+        byCategoryExpense[tx.category] = (byCategoryExpense[tx.category] || 0) + Math.abs(tx.amount);
+      }
     }
 
+    // 保留向後兼容的總分類統計
     if (tx.category) {
       byCategory[tx.category] = (byCategory[tx.category] || 0) + Math.abs(tx.amount);
     }
@@ -224,6 +235,8 @@ export async function getSummary(year: number, month?: number): Promise<Summary>
     totalExpense,
     balance: totalIncome - totalExpense,
     byCategory,
+    byCategoryExpense,
+    byCategoryIncome,
   };
 }
 
