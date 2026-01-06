@@ -4,10 +4,13 @@ import { useState, useEffect, useCallback } from 'react';
 import type { Transaction, Account } from '@/types';
 import { TransactionList } from '@/components/TransactionList';
 
+type TransactionFilter = 'all' | 'expense' | 'income' | 'transfer';
+
 export default function TransactionsPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<TransactionFilter>('all');
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -96,7 +99,26 @@ export default function TransactionsPage() {
     );
   };
 
+  // 篩選交易
+  const filteredTransactions = transactions.filter(tx => {
+    if (filter === 'all') return true;
+    if (filter === 'expense') return tx.amount < 0 && tx.category !== '轉帳';
+    if (filter === 'income') return tx.amount > 0 && tx.category !== '轉帳';
+    if (filter === 'transfer') return tx.category === '轉帳';
+    return true;
+  });
+
   const [displayYear, displayMonth] = selectedMonth.split('-').map(Number);
+
+  // 獲取篩選後的筆數描述
+  const getFilterLabel = () => {
+    switch (filter) {
+      case 'expense': return '支出';
+      case 'income': return '收入';
+      case 'transfer': return '轉帳';
+      default: return '';
+    }
+  };
 
   return (
     <div className="animate-fade-in" style={{ paddingBottom: '80px' }}>
@@ -148,6 +170,58 @@ export default function TransactionsPage() {
         </button>
       </div>
 
+      {/* 篩選按鈕 */}
+      <div style={{ 
+        display: 'flex', 
+        gap: '8px',
+        marginBottom: '16px',
+      }}>
+        <button
+          onClick={() => setFilter('all')}
+          className={`btn ${filter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+          style={{ 
+            flex: 1,
+            padding: '8px 12px',
+            fontSize: '0.8125rem',
+          }}
+        >
+          全部
+        </button>
+        <button
+          onClick={() => setFilter('expense')}
+          className={`btn ${filter === 'expense' ? 'btn-primary' : 'btn-secondary'}`}
+          style={{ 
+            flex: 1,
+            padding: '8px 12px',
+            fontSize: '0.8125rem',
+          }}
+        >
+          支出
+        </button>
+        <button
+          onClick={() => setFilter('income')}
+          className={`btn ${filter === 'income' ? 'btn-primary' : 'btn-secondary'}`}
+          style={{ 
+            flex: 1,
+            padding: '8px 12px',
+            fontSize: '0.8125rem',
+          }}
+        >
+          收入
+        </button>
+        <button
+          onClick={() => setFilter('transfer')}
+          className={`btn ${filter === 'transfer' ? 'btn-primary' : 'btn-secondary'}`}
+          style={{ 
+            flex: 1,
+            padding: '8px 12px',
+            fontSize: '0.8125rem',
+          }}
+        >
+          轉帳
+        </button>
+      </div>
+
       {/* 交易列表 */}
       {loading ? (
         <div style={{ 
@@ -164,10 +238,10 @@ export default function TransactionsPage() {
             color: 'var(--text-secondary)',
             marginBottom: '12px',
           }}>
-            共 {transactions.length} 筆記錄
+            共 {filteredTransactions.length} 筆{getFilterLabel()}記錄
           </div>
           <TransactionList
-            transactions={transactions}
+            transactions={filteredTransactions}
             accounts={accounts}
             onUpdate={handleUpdate}
             onDelete={handleDelete}
@@ -177,3 +251,4 @@ export default function TransactionsPage() {
     </div>
   );
 }
+
