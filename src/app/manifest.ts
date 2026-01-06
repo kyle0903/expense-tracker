@@ -2,8 +2,8 @@ import type { MetadataRoute } from 'next'
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: '記帳',
-    short_name: '記帳',
+    name: 'Notion記帳',
+    short_name: 'Notion記帳',
     description: '個人記帳工具 — 與 Notion 連動',
     start_url: '/',
     display: 'standalone',
