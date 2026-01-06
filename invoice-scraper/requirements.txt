@@ -1,0 +1,27 @@
+# FastAPI 電子發票爬蟲 API
+
+# Selenium 瀏覽器自動化
+selenium
+webdriver-manager
+
+# 圖片處理
+Pillow
+
+# 環境變數
+python-dotenv
+
+# HTTP client
+requests
+
+# OpenAI (驗證碼辨識 + 分類)
+openai
+
+# 日期處理
+python-dateutil
+
+# FastAPI
+fastapi
+uvicorn[standard]
+
+# Notion API
+notion-client>=2.0.0

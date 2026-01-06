@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 const navItems = [
   { href: '/', icon: '📝', label: '記帳' },
   { href: '/transactions', icon: '📋', label: '紀錄' },
+  { href: '/invoices', icon: '🧾', label: '載具' },
   { href: '/accounts', icon: '💳', label: '帳戶' },
   { href: '/summary', icon: '📊', label: '報表' },
 ];

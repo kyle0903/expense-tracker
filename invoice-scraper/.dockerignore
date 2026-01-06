@@ -1,0 +1,34 @@
+# 電子發票爬蟲 Docker 建置忽略檔案
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+ENV/
+env/
+
+# 環境變數
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 測試
+.pytest_cache/
+htmlcov/
+.coverage
+
+# 其他
+.git/
+.gitignore
+README.md
+*.md

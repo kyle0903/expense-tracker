@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAccounts, createAccount } from '@/lib/notion';
+import { getAccounts, createAccount, updateAccount } from '@/lib/notion';
 import type { Account, ApiResponse } from '@/types';
 
 // GET: 查詢帳戶列表
@@ -48,6 +48,34 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
     return NextResponse.json({
       success: false,
       error: '新增帳戶失敗',
+    }, { status: 500 });
+  }
+}
+
+// PUT: 更新帳戶
+export async function PUT(request: NextRequest): Promise<NextResponse<ApiResponse<{ success: boolean }>>> {
+  try {
+    const body = await request.json();
+    const { id, ...updates } = body;
+
+    if (!id) {
+      return NextResponse.json({
+        success: false,
+        error: '缺少帳戶 ID',
+      }, { status: 400 });
+    }
+
+    await updateAccount(id, updates);
+
+    return NextResponse.json({
+      success: true,
+      data: { success: true },
+    });
+  } catch (error) {
+    console.error('Failed to update account:', error);
+    return NextResponse.json({
+      success: false,
+      error: '更新帳戶失敗',
     }, { status: 500 });
   }
 }

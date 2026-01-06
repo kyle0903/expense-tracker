@@ -16,7 +16,7 @@ export default function AccountsPage() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const accountTypes = ['現金', '銀行帳戶', '信用卡', '電子支付', '其他'];
+  const accountTypes = ['現金', '銀行帳戶', '信用卡', '儲值卡', '其他'];
 
   // 載入帳戶
   useEffect(() => {

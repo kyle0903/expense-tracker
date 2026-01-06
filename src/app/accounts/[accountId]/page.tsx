@@ -9,11 +9,15 @@ export default function AccountDetailPage() {
   const params = useParams();
   const router = useRouter();
   const accountId = params.accountId as string;
-  
+
   const [account, setAccount] = useState<Account | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // 編輯初始金額
+  const [isEditingBalance, setIsEditingBalance] = useState(false);
+  const [editBalance, setEditBalance] = useState('');
 
   // 載入資料
   const loadData = useCallback(async () => {
@@ -79,7 +83,7 @@ export default function AccountDetailPage() {
   // 刪除交易
   const handleDelete = async (id: string) => {
     if (!confirm('確定要刪除這筆交易記錄嗎？')) return;
-    
+
     try {
       const res = await fetch(`/api/transactions?id=${id}`, {
         method: 'DELETE',
@@ -93,6 +97,42 @@ export default function AccountDetailPage() {
     } catch (error) {
       console.error('Failed to delete:', error);
       alert('刪除失敗');
+    }
+  };
+
+  // 開始編輯初始金額
+  const startEditBalance = () => {
+    setEditBalance(account?.initialBalance?.toString() || '0');
+    setIsEditingBalance(true);
+  };
+
+  // 儲存初始金額
+  const saveInitialBalance = async () => {
+    const newBalance = parseFloat(editBalance);
+    if (isNaN(newBalance)) {
+      alert('請輸入有效的金額');
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/accounts', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: accountId,
+          initialBalance: newBalance,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setIsEditingBalance(false);
+        loadData();
+      } else {
+        alert('更新失敗：' + data.error);
+      }
+    } catch (error) {
+      console.error('Failed to update:', error);
+      alert('更新失敗');
     }
   };
 
@@ -176,17 +216,85 @@ export default function AccountDetailPage() {
         </div>
         
         {/* 初始金額和交易加總 */}
-        <div style={{ 
-          display: 'flex', 
+        <div style={{
+          display: 'flex',
           justifyContent: 'space-between',
           marginTop: '16px',
           paddingTop: '12px',
           borderTop: '1px solid var(--border-light)',
           fontSize: '0.875rem',
         }}>
-          <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ color: 'var(--text-secondary)' }}>初始金額：</span>
-            <span>${account.initialBalance.toLocaleString()}</span>
+            {isEditingBalance ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <input
+                  type="number"
+                  value={editBalance}
+                  onChange={(e) => setEditBalance(e.target.value)}
+                  style={{
+                    width: '100px',
+                    padding: '4px 8px',
+                    fontSize: '0.875rem',
+                    border: '1px solid var(--border-medium)',
+                    borderRadius: '4px',
+                    background: 'var(--bg-primary)',
+                    color: 'var(--text-primary)',
+                  }}
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') saveInitialBalance();
+                    if (e.key === 'Escape') setIsEditingBalance(false);
+                  }}
+                />
+                <button
+                  onClick={saveInitialBalance}
+                  style={{
+                    padding: '4px 8px',
+                    fontSize: '0.75rem',
+                    background: 'var(--text-primary)',
+                    color: 'var(--bg-primary)',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  儲存
+                </button>
+                <button
+                  onClick={() => setIsEditingBalance(false)}
+                  style={{
+                    padding: '4px 8px',
+                    fontSize: '0.75rem',
+                    background: 'var(--bg-tertiary)',
+                    color: 'var(--text-secondary)',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  取消
+                </button>
+              </div>
+            ) : (
+              <>
+                <span>${account.initialBalance.toLocaleString()}</span>
+                <button
+                  onClick={startEditBalance}
+                  style={{
+                    padding: '2px 6px',
+                    fontSize: '0.7rem',
+                    background: 'transparent',
+                    color: 'var(--text-tertiary)',
+                    border: '1px solid var(--border-light)',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  編輯
+                </button>
+              </>
+            )}
           </div>
           <div>
             <span style={{ color: 'var(--text-secondary)' }}>交易加總：</span>

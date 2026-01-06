@@ -14,6 +14,14 @@ const ACCOUNTS_DB_ID = process.env.NOTION_ACCOUNTS_DB_ID!;
  * 新增交易記錄到 Notion
  */
 export async function createTransaction(transaction: Transaction): Promise<string> {
+  // 取得帳戶 ID
+  const accounts = await getAccounts();
+  const account = accounts.find(a => a.name === transaction.account);
+
+  if (!account) {
+    throw new Error(`找不到帳戶：${transaction.account}`);
+  }
+
   const response = await notion.pages.create({
     parent: { database_id: TRANSACTIONS_DB_ID },
     properties: {
@@ -30,14 +38,14 @@ export async function createTransaction(transaction: Transaction): Promise<strin
         number: transaction.amount,
       },
       '帳戶': {
-        select: { name: transaction.account },
+        relation: [{ id: account.id }],
       },
       '備註': {
         rich_text: [{ text: { content: transaction.note || '' } }],
       },
     },
   });
-  
+
   return response.id;
 }
 
@@ -49,7 +57,7 @@ export async function getTransactions(
   endDate?: string
 ): Promise<Transaction[]> {
   const filter: any = {};
-  
+
   if (startDate && endDate) {
     filter.and = [
       {
@@ -70,15 +78,27 @@ export async function getTransactions(
     page_size: 100,
   });
 
+  // 取得所有帳戶以便對照 relation ID
+  const accounts = await getAccounts();
+  const accountMap = new Map(accounts.map(a => [a.id, a.name]));
+
   return response.results.map((page: any) => {
     const props = page.properties;
+
+    // 帳戶欄位是 relation 類型
+    let accountName = '';
+    if (props['帳戶']?.relation?.length > 0) {
+      const relatedId = props['帳戶'].relation[0].id;
+      accountName = accountMap.get(relatedId) || '';
+    }
+
     return {
       id: page.id,
       name: props['名稱']?.title?.[0]?.text?.content || '',
       category: props['分類']?.select?.name || '',
       date: props['日期']?.date?.start || '',
       amount: props['金額']?.number || 0,
-      account: props['帳戶']?.select?.name || '',
+      account: accountName,
       note: props['備註']?.rich_text?.[0]?.text?.content || '',
     };
   });
@@ -99,8 +119,8 @@ export async function getAccounts(): Promise<Account[]> {
       name: props['帳戶名稱']?.title?.[0]?.text?.content || '',
       type: props['帳戶類型']?.select?.name || '',
       initialBalance: props['初始金額']?.number || 0,
-      transactionSum: props['交易加總']?.formula?.number || props['交易加總']?.number || 0,
-      balance: props['餘額']?.formula?.number || props['餘額']?.number || 0,
+      transactionSum: props['交易加總']?.rollup?.number || 0,
+      balance: props['餘額']?.formula?.number || 0,
     };
   });
 }
@@ -123,8 +143,39 @@ export async function createAccount(account: Omit<Account, 'id' | 'transactionSu
       },
     },
   });
-  
+
   return response.id;
+}
+
+/**
+ * 更新帳戶
+ */
+export async function updateAccount(
+  id: string,
+  updates: Partial<Pick<Account, 'name' | 'type' | 'initialBalance'>>
+): Promise<void> {
+  const properties: any = {};
+
+  if (updates.name !== undefined) {
+    properties['帳戶名稱'] = {
+      title: [{ text: { content: updates.name } }],
+    };
+  }
+  if (updates.type !== undefined) {
+    properties['帳戶類型'] = {
+      select: { name: updates.type },
+    };
+  }
+  if (updates.initialBalance !== undefined) {
+    properties['初始金額'] = {
+      number: updates.initialBalance,
+    };
+  }
+
+  await notion.pages.update({
+    page_id: id,
+    properties,
+  });
 }
 
 /**
@@ -206,9 +257,14 @@ export async function updateTransaction(
     };
   }
   if (transaction.account !== undefined) {
-    properties['帳戶'] = {
-      select: { name: transaction.account },
-    };
+    // 取得帳戶 ID
+    const accounts = await getAccounts();
+    const account = accounts.find(a => a.name === transaction.account);
+    if (account) {
+      properties['帳戶'] = {
+        relation: [{ id: account.id }],
+      };
+    }
   }
   if (transaction.note !== undefined) {
     properties['備註'] = {
@@ -238,24 +294,33 @@ export async function deleteTransaction(id: string): Promise<void> {
 export async function getTransactionsByAccount(
   accountName: string
 ): Promise<Transaction[]> {
+  // 先取得帳戶 ID（用於 relation 查詢）
+  const accounts = await getAccounts();
+  const account = accounts.find(a => a.name === accountName);
+
+  if (!account) {
+    return [];
+  }
+
   const response = await notion.databases.query({
     database_id: TRANSACTIONS_DB_ID,
     filter: {
       property: '帳戶',
-      select: { equals: accountName },
+      relation: { contains: account.id },
     },
     sorts: [{ property: '日期', direction: 'descending' }],
   });
 
   return response.results.map((page: any) => {
     const props = page.properties;
+
     return {
       id: page.id,
       name: props['名稱']?.title?.[0]?.text?.content || '',
       category: props['分類']?.select?.name || '',
       date: props['日期']?.date?.start || '',
       amount: props['金額']?.number || 0,
-      account: props['帳戶']?.select?.name || '',
+      account: accountName,
       note: props['備註']?.rich_text?.[0]?.text?.content || '',
     };
   });
@@ -273,8 +338,8 @@ export async function getAccountById(id: string): Promise<Account | null> {
       name: props['帳戶名稱']?.title?.[0]?.text?.content || '',
       type: props['帳戶類型']?.select?.name || '',
       initialBalance: props['初始金額']?.number || 0,
-      transactionSum: props['交易加總']?.formula?.number || props['交易加總']?.number || 0,
-      balance: props['餘額']?.formula?.number || props['餘額']?.number || 0,
+      transactionSum: props['交易加總']?.rollup?.number || 0,
+      balance: props['餘額']?.formula?.number || 0,
     };
   } catch {
     return null;
