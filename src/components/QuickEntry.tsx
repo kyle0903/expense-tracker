@@ -416,6 +416,40 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
               ))}
             </div>
 
+            {/* 名稱建議 */}
+            {category && CATEGORY_SUGGESTIONS[category] && (
+              <div className="name-suggestions">
+                {CATEGORY_SUGGESTIONS[category].map((suggestion) => (
+                  <button
+                    key={suggestion}
+                    onClick={() => setName(suggestion)}
+                    className={`suggestion-chip ${name === suggestion ? 'selected' : ''}`}
+                  >
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* 名稱輸入 */}
+            <input
+              type="text"
+              className="note-input"
+              placeholder="名稱（必填）"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              style={{ marginBottom: '10px' }}
+            />
+
+            {/* 備註輸入 */}
+            <input
+              type="text"
+              className="note-input"
+              placeholder="備註（選填）"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+            />
+
             {/* 代墊功能 - 只在支出模式顯示，放在帳戶上面 */}
             {mode === 'expense' && (
               <div className="split-payment-section">
@@ -511,40 +545,6 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
                 </button>
               ))}
             </div>
-
-            {/* 名稱建議 */}
-            {category && CATEGORY_SUGGESTIONS[category] && (
-              <div className="name-suggestions">
-                {CATEGORY_SUGGESTIONS[category].map((suggestion) => (
-                  <button
-                    key={suggestion}
-                    onClick={() => setName(suggestion)}
-                    className={`suggestion-chip ${name === suggestion ? 'selected' : ''}`}
-                  >
-                    {suggestion}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* 名稱輸入 */}
-            <input
-              type="text"
-              className="note-input"
-              placeholder="名稱（必填）"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              style={{ marginBottom: '10px' }}
-            />
-
-            {/* 備註輸入 */}
-            <input
-              type="text"
-              className="note-input"
-              placeholder="備註（選填）"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-            />
           </>
         )}
       </div>
@@ -918,6 +918,7 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
           background: var(--bg-secondary);
           border-radius: 12px;
           margin-bottom: 12px;
+          margin-top: 12px;
           overflow: hidden;
         }
 
