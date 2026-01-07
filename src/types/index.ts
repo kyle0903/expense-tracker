@@ -26,7 +26,7 @@ export interface Transaction {
   id?: string;
   name: string; // 名稱
   category: string; // 分類
-  date: string; // 日期 (YYYY-MM-DD)
+  date: string; // 日期 (YYYY-MM-DD 或 ISO 8601 完整格式)
   amount: number; // 金額（正負表示收入/支出）
   account: string; // 帳戶
   note?: string; // 備註

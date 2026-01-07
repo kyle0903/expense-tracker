@@ -10,6 +10,24 @@ interface QuickEntryProps {
 
 type EntryMode = 'expense' | 'income' | 'transfer';
 
+// 取得台北時區的 ISO 格式日期字串
+function getTaipeiISOString(): string {
+  const now = new Date();
+  // 台北時區偏移 +8 小時
+  const taipeiOffset = 8 * 60; // 分鐘
+  const utcOffset = now.getTimezoneOffset(); // 當前時區偏移（分鐘，反向）
+  const taipeiTime = new Date(now.getTime() + (taipeiOffset + utcOffset) * 60 * 1000);
+  
+  const year = taipeiTime.getFullYear();
+  const month = String(taipeiTime.getMonth() + 1).padStart(2, '0');
+  const day = String(taipeiTime.getDate()).padStart(2, '0');
+  const hours = String(taipeiTime.getHours()).padStart(2, '0');
+  const minutes = String(taipeiTime.getMinutes()).padStart(2, '0');
+  const seconds = String(taipeiTime.getSeconds()).padStart(2, '0');
+  
+  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}+08:00`;
+}
+
 export function QuickEntry({ onSuccess }: QuickEntryProps) {
   const [amount, setAmount] = useState<string>('');
   const [mode, setMode] = useState<EntryMode>('expense');
@@ -95,7 +113,7 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
             fromAccount: account,
             toAccount: toAccount,
             amount: parseFloat(amount),
-            date: new Date().toISOString().split('T')[0],
+            date: getTaipeiISOString(),
           }),
         });
 
@@ -126,7 +144,7 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
         const transaction: Transaction = {
           name: name || category,
           category,
-          date: new Date().toISOString().split('T')[0],
+          date: getTaipeiISOString(),
           amount: mode === 'expense' ? -parseFloat(amount) : parseFloat(amount),
           account,
           note,

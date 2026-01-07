@@ -26,12 +26,72 @@ export function TransactionList({
   const expenseCategories = DEFAULT_CATEGORIES.filter(c => c.type === 'expense');
   const incomeCategories = DEFAULT_CATEGORIES.filter(c => c.type === 'income');
 
+  // 格式化日期時間顯示 (將 ISO 格式轉換為易讀的 MM/DD HH:mm)
+  const formatDateTime = (dateStr: string): string => {
+    if (!dateStr) return '';
+    
+    try {
+      // 嘗試解析為 Date 物件
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) {
+        return dateStr; // 無法解析，直接返回原字串
+      }
+      
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      
+      // 如果時間是 00:00，只顯示日期
+      if (hours === '00' && minutes === '00') {
+        return `${month}/${day}`;
+      }
+      
+      return `${month}/${day} ${hours}:${minutes}`;
+    } catch {
+      return dateStr;
+    }
+  };
+
+  // 將日期轉換為 datetime-local input 可用的格式 (YYYY-MM-DDTHH:MM)
+  const toDateTimeLocalValue = (dateStr: string): string => {
+    if (!dateStr) return '';
+    
+    try {
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) {
+        // 如果是純日期格式 YYYY-MM-DD，加上預設時間
+        if (dateStr.length === 10) {
+          return `${dateStr}T00:00`;
+        }
+        return '';
+      }
+      
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      
+      return `${year}-${month}-${day}T${hours}:${minutes}`;
+    } catch {
+      return '';
+    }
+  };
+
+  // 將 datetime-local 值轉換為 ISO 格式
+  const fromDateTimeLocalValue = (value: string): string => {
+    if (!value) return '';
+    // datetime-local 格式為 YYYY-MM-DDTHH:MM，直接加上時區標記
+    return `${value}:00+08:00`;
+  };
+
   const handleEdit = (tx: Transaction) => {
     setEditingId(tx.id || null);
     setEditForm({
       name: tx.name,
       category: tx.category,
-      date: tx.date,
+      date: toDateTimeLocalValue(tx.date), // 轉換為 datetime-local 格式
       amount: tx.amount,
       account: tx.account,
       note: tx.note,
@@ -41,9 +101,13 @@ export function TransactionList({
   const handleSave = async () => {
     if (!editingId || !onUpdate) return;
     
+    // 將 datetime-local 格式轉換為 ISO 格式再儲存
+    const dateToSave = editForm.date ? fromDateTimeLocalValue(editForm.date) : '';
+    
     await onUpdate({
       id: editingId,
       ...editForm as Transaction,
+      date: dateToSave,
     });
     setEditingId(null);
     setEditForm({});
@@ -126,7 +190,7 @@ export function TransactionList({
                   </div>
                   <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
                     <input
-                      type="date"
+                      type="datetime-local"
                       className="input"
                       value={editForm.date || ''}
                       onChange={(e) => setEditForm({ ...editForm, date: e.target.value })}
@@ -183,7 +247,7 @@ export function TransactionList({
                     color: 'var(--text-secondary)',
                     marginTop: '2px',
                   }}>
-                    {tx.category} · {tx.account} · {tx.date}
+                    {tx.category} · {tx.account} · {formatDateTime(tx.date)}
                   </div>
                 </div>
                 <div 

@@ -34,7 +34,7 @@ load_dotenv()
 class Invoice:
     """發票資料結構"""
     invoice_number: str      # 發票號碼
-    invoice_date: str        # 發票日期 (YYYY-MM-DD)
+    invoice_date: str        # 發票日期 (來自 getCarrierInvoiceData API)
     seller_name: str         # 賣方名稱
     amount: int              # 金額
     details: Optional[str]   # 消費明細
@@ -375,10 +375,11 @@ class EInvoiceScraper:
 
         invoices = []
 
-        # 計算日期範圍 (使用 UTC 時間)
+        # 計算日期範圍 (使用台北時區)
         # 注意: API 對查詢區間有限制，使用當月1日到今天
-        from datetime import timezone
-        end_date = datetime.now(timezone.utc)
+        from zoneinfo import ZoneInfo
+        taipei_tz = ZoneInfo('Asia/Taipei')
+        end_date = datetime.now(taipei_tz)
         # 當月1日
         start_date = end_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
@@ -458,25 +459,58 @@ class EInvoiceScraper:
                     
                     if isinstance(invoice_list, list) and len(invoice_list) > 0:
                         for item in invoice_list:
-                            # 取得發票的 token 來查詢明細
+                            # 取得發票的 token 來查詢完整資料
                             invoice_token = item.get('token', '')
                             
-                            # 先解析基本資訊
+                            # 先取得發票號碼
                             invoice_number = item.get('invoiceNumber', '')
-                            invoice_date_raw = item.get('invoiceDate', '')
-                            seller_name = item.get('sellerName', '未知商店')
-                            amount = int(item.get('totalAmount', 0))
                             
-                            # 轉換日期格式
-                            if invoice_date_raw:
-                                invoice_date = str(invoice_date_raw)[:10]
-                            else:
-                                invoice_date = datetime.now().strftime('%Y-%m-%d')
-                            
-                            # 取得消費明細
+                            # 透過 getCarrierInvoiceData API 取得正確的日期、金額、店家
+                            invoice_date = None
+                            seller_name = None
+                            amount = None
                             details = None
+                            
                             if invoice_token:
-                                details = self._get_invoice_details(invoice_token)
+                                invoice_data = self._get_invoice_data(invoice_token)
+                                if invoice_data:
+                                    # 組合 invoiceDate (YYYYMMDD) + invoiceTime (HH:MM:SS) 為完整日期時間
+                                    raw_date = invoice_data.get('invoiceDate', '')  # "20260105"
+                                    raw_time = invoice_data.get('invoiceTime', '')  # "15:49:41"
+                                    
+                                    if raw_date and len(raw_date) == 8:
+                                        # 轉換 YYYYMMDD 為 YYYY-MM-DD
+                                        formatted_date = f"{raw_date[:4]}-{raw_date[4:6]}-{raw_date[6:8]}"
+                                        if raw_time:
+                                            # 組合日期和時間，加上台北時區
+                                            invoice_date = f"{formatted_date}T{raw_time}+08:00"
+                                        else:
+                                            invoice_date = f"{formatted_date}T00:00:00+08:00"
+                                    
+                                    # 取得正確的金額
+                                    total_amount = invoice_data.get('totalAmount', '')
+                                    if total_amount:
+                                        amount = int(total_amount)
+                                    
+                                    # 取得正確的店家名稱
+                                    seller_name = invoice_data.get('sellerName', '')
+                                    
+                                    # 同時取得明細
+                                    details = self._get_invoice_details(invoice_token)
+                            
+                            # 如果沒有從 API 取得資料，使用列表中的資料作為 fallback
+                            if not invoice_date:
+                                invoice_date_raw = item.get('invoiceDate', '')
+                                if invoice_date_raw:
+                                    invoice_date = str(invoice_date_raw)
+                                else:
+                                    invoice_date = datetime.now().strftime('%Y-%m-%dT%H:%M:%S+08:00')
+                            
+                            if not seller_name:
+                                seller_name = item.get('sellerName', '未知商店')
+                            
+                            if amount is None:
+                                amount = int(item.get('totalAmount', 0))
                             
                             invoice = Invoice(
                                 invoice_number=invoice_number,
@@ -492,6 +526,49 @@ class EInvoiceScraper:
             pass
 
         return invoices
+    
+    def _get_invoice_data(self, token: str) -> Optional[dict]:
+        """
+        透過 token 呼叫 getCarrierInvoiceData API 取得發票資料（包含正確的日期）
+        
+        Args:
+            token: 發票的 JWT token
+            
+        Returns:
+            包含 invoiceDate 等資訊的 dict，或 None
+        """
+        import requests
+        
+        api_url = "https://service-mc.einvoice.nat.gov.tw/btc/cloud/api/common/getCarrierInvoiceData"
+        
+        headers = {
+            'Accept': 'application/json, text/plain, */*',
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {self.auth_token}' if self.auth_token else '',
+            'Origin': 'https://www.einvoice.nat.gov.tw',
+            'Referer': 'https://www.einvoice.nat.gov.tw/',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        
+        try:
+            # Payload 是發票的 JWT token 字串 (帶雙引號)
+            response = requests.post(
+                api_url,
+                headers=headers,
+                cookies=self.cookies,
+                data=f'"{token}"',
+                timeout=10
+            )
+            
+            if response.status_code == 200 and response.text:
+                data = response.json()
+                # 回傳整個資料物件
+                return data
+                    
+        except Exception:
+            pass
+        
+        return None
     
     def _get_invoice_details(self, token: str) -> Optional[str]:
         """透過 token 取得發票消費明細"""
