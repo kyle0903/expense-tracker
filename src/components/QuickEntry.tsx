@@ -43,6 +43,15 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
   const [showToAccountPicker, setShowToAccountPicker] = useState(false);
   const [showNumpad, setShowNumpad] = useState(false);
 
+  // 代墊相關狀態
+  const [isSplitPayment, setIsSplitPayment] = useState(false);
+  const [splitPeople, setSplitPeople] = useState(2);
+  const [useCustomSplit, setUseCustomSplit] = useState(false);
+  const [customSplitAmount, setCustomSplitAmount] = useState('');
+
+  // 轉帳子模式：'transfer' 或 'repayment'
+  const [transferSubMode, setTransferSubMode] = useState<'transfer' | 'repayment'>('transfer');
+
   // 載入帳戶列表
   useEffect(() => {
     async function loadAccounts() {
@@ -94,6 +103,30 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
       })
     : '0';
 
+  // 計算代墊金額
+  const calculateSplitAmount = useCallback(() => {
+    if (!amount || !isSplitPayment) return { ownAmount: parseFloat(amount || '0'), splitAmount: 0 };
+    
+    const totalAmount = parseFloat(amount);
+    
+    if (useCustomSplit && customSplitAmount) {
+      // 使用自訂代墊金額
+      const split = parseFloat(customSplitAmount);
+      return {
+        ownAmount: Math.max(0, totalAmount - split),
+        splitAmount: Math.min(split, totalAmount)
+      };
+    } else {
+      // 按人數均分
+      const perPerson = Math.round(totalAmount / splitPeople);
+      const ownAmount = perPerson;
+      const splitAmount = totalAmount - perPerson;
+      return { ownAmount, splitAmount };
+    }
+  }, [amount, isSplitPayment, splitPeople, useCustomSplit, customSplitAmount]);
+
+  const { ownAmount, splitAmount } = calculateSplitAmount();
+
   // 送出表單
   const handleSubmit = async () => {
     if (!amount) return;
@@ -141,13 +174,26 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
 
       setIsSubmitting(true);
       try {
+        // 計算實際金額（考慮代墊）
+        let actualAmount = parseFloat(amount);
+        let finalNote = note;
+        
+        if (mode === 'expense' && isSplitPayment && amount) {
+          const { ownAmount: myPortion, splitAmount: othersAmount } = calculateSplitAmount();
+          actualAmount = myPortion;
+          const splitInfo = useCustomSplit 
+            ? `[代墊] 總額 $${parseFloat(amount).toLocaleString()}, 代墊 $${othersAmount.toLocaleString()}`
+            : `[代墊] 總額 $${parseFloat(amount).toLocaleString()}, 代墊 $${othersAmount.toLocaleString()} (${splitPeople}人均分)`;
+          finalNote = finalNote ? `${splitInfo} | ${finalNote}` : splitInfo;
+        }
+        
         const transaction: Transaction = {
           name: name || category,
           category,
           date: getTaipeiISOString(),
-          amount: mode === 'expense' ? -parseFloat(amount) : parseFloat(amount),
+          amount: mode === 'expense' ? -actualAmount : actualAmount,
           account,
-          note,
+          note: finalNote,
         };
 
         const res = await fetch('/api/transactions', {
@@ -165,6 +211,10 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
             setCategory('');
             setNote('');
             setName('');
+            setIsSplitPayment(false);
+            setSplitPeople(2);
+            setUseCustomSplit(false);
+            setCustomSplitAmount('');
             onSuccess?.();
           }, 1200);
         } else {
@@ -183,7 +233,9 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
   const selectedToAccount = accounts.find((a) => a.name === toAccount);
 
   const canSubmit = mode === 'transfer' 
-    ? amount && account && toAccount && account !== toAccount
+    ? transferSubMode === 'repayment'
+      ? amount && account && name
+      : amount && account && toAccount && account !== toAccount
     : amount && category && account && name;
 
   // 確認金額並關閉數字鍵盤
@@ -222,7 +274,7 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
           收入
         </button>
         <button
-          onClick={() => { setMode('transfer'); setCategory('轉帳'); }}
+          onClick={() => { setMode('transfer'); setCategory('轉帳'); setTransferSubMode('transfer'); }}
           className={`mode-tab ${mode === 'transfer' ? 'active transfer' : ''}`}
         >
           轉帳
@@ -247,47 +299,104 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
       <div className="quick-options">
         {mode === 'transfer' ? (
           <>
-            {/* 轉帳帳戶選擇 */}
-            <div className="transfer-accounts">
-              <div className="transfer-account" onClick={() => { setShowAccountPicker(!showAccountPicker); setShowToAccountPicker(false); }}>
-                <div className="transfer-label">從</div>
-                <div className="transfer-name">{account || '選擇帳戶'}</div>
-              </div>
-              <div className="transfer-arrow">→</div>
-              <div className="transfer-account" onClick={() => { setShowToAccountPicker(!showToAccountPicker); setShowAccountPicker(false); }}>
-                <div className="transfer-label">到</div>
-                <div className="transfer-name">{toAccount || '選擇帳戶'}</div>
-              </div>
+            {/* 轉帳子模式切換 */}
+            <div className="transfer-sub-tabs">
+              <button
+                className={`transfer-sub-tab ${transferSubMode === 'transfer' ? 'active' : ''}`}
+                onClick={() => { setTransferSubMode('transfer'); setCategory('轉帳'); setName(''); }}
+              >
+               💳 帳戶轉帳
+              </button>
+              <button
+                className={`transfer-sub-tab ${transferSubMode === 'repayment' ? 'active' : ''}`}
+                onClick={() => { setTransferSubMode('repayment'); setCategory('代墊還款'); setName('朋友還款'); }}
+              >
+                🤝 代墊還款
+              </button>
             </div>
 
-            {/* 帳戶選擇器 */}
-            {showAccountPicker && (
-              <div className="account-dropdown">
-                {accounts.map((acc) => (
-                  <div
-                    key={acc.id}
-                    className={`account-option ${account === acc.name ? 'selected' : ''}`}
-                    onClick={() => { setAccount(acc.name); setShowAccountPicker(false); }}
-                  >
-                    <span>{acc.name}</span>
-                    <span className="account-balance">${acc.balance.toLocaleString()}</span>
+            {transferSubMode === 'transfer' ? (
+              <>
+                {/* 帳戶轉帳 UI */}
+                <div className="transfer-accounts">
+                  <div className="transfer-account" onClick={() => { setShowAccountPicker(!showAccountPicker); setShowToAccountPicker(false); }}>
+                    <div className="transfer-label">從</div>
+                    <div className="transfer-name">{account || '選擇帳戶'}</div>
                   </div>
-                ))}
-              </div>
-            )}
-            {showToAccountPicker && (
-              <div className="account-dropdown">
-                {accounts.filter(a => a.name !== account).map((acc) => (
-                  <div
-                    key={acc.id}
-                    className={`account-option ${toAccount === acc.name ? 'selected' : ''}`}
-                    onClick={() => { setToAccount(acc.name); setShowToAccountPicker(false); }}
-                  >
-                    <span>{acc.name}</span>
-                    <span className="account-balance">${acc.balance.toLocaleString()}</span>
+                  <div className="transfer-arrow">→</div>
+                  <div className="transfer-account" onClick={() => { setShowToAccountPicker(!showToAccountPicker); setShowAccountPicker(false); }}>
+                    <div className="transfer-label">到</div>
+                    <div className="transfer-name">{toAccount || '選擇帳戶'}</div>
                   </div>
-                ))}
-              </div>
+                </div>
+
+                {showAccountPicker && (
+                  <div className="account-dropdown">
+                    {accounts.map((acc) => (
+                      <div
+                        key={acc.id}
+                        className={`account-option ${account === acc.name ? 'selected' : ''}`}
+                        onClick={() => { setAccount(acc.name); setShowAccountPicker(false); }}
+                      >
+                        <span>{acc.name}</span>
+                        <span className="account-balance">${acc.balance.toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {showToAccountPicker && (
+                  <div className="account-dropdown">
+                    {accounts.filter(a => a.name !== account).map((acc) => (
+                      <div
+                        key={acc.id}
+                        className={`account-option ${toAccount === acc.name ? 'selected' : ''}`}
+                        onClick={() => { setToAccount(acc.name); setShowToAccountPicker(false); }}
+                      >
+                        <span>{acc.name}</span>
+                        <span className="account-balance">${acc.balance.toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                {/* 還款 UI */}
+                <div className="repayment-info">
+                  <div className="repayment-text">還你的錢將存入選擇的帳戶（不計入收入統計）</div>
+                </div>
+
+                {/* 帳戶選擇 - 卡片式 */}
+                <div className="account-cards">
+                  {accounts.map((acc) => (
+                    <button
+                      key={acc.id}
+                      onClick={() => setAccount(acc.name)}
+                      className={`account-card ${account === acc.name ? 'selected' : ''}`}
+                    >
+                      <span className="account-card-name">{acc.name}</span>
+                      <span className="account-card-balance">${acc.balance.toLocaleString()}</span>
+                    </button>
+                  ))}
+                </div>
+
+                <input
+                  type="text"
+                  className="note-input"
+                  placeholder="還款人（例如：小明還款）"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  style={{ marginBottom: '10px' }}
+                />
+
+                <input
+                  type="text"
+                  className="note-input"
+                  placeholder="備註（選填）"
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                />
+              </>
             )}
           </>
         ) : (
@@ -306,24 +415,98 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
               ))}
             </div>
 
-            {/* 帳戶選擇 */}
-            <div className="account-row" onClick={() => setShowAccountPicker(!showAccountPicker)}>
-              <span className="account-label">帳戶</span>
-              <span className="account-value">{account || '選擇'} ›</span>
+            {/* 帳戶選擇 - 卡片式 */}
+            <div className="account-cards">
+              {accounts.map((acc) => (
+                <button
+                  key={acc.id}
+                  onClick={() => setAccount(acc.name)}
+                  className={`account-card ${account === acc.name ? 'selected' : ''}`}
+                >
+                  <span className="account-card-name">{acc.name}</span>
+                  <span className="account-card-balance">${acc.balance.toLocaleString()}</span>
+                </button>
+              ))}
             </div>
 
-            {showAccountPicker && (
-              <div className="account-dropdown">
-                {accounts.map((acc) => (
-                  <div
-                    key={acc.id}
-                    className={`account-option ${account === acc.name ? 'selected' : ''}`}
-                    onClick={() => { setAccount(acc.name); setShowAccountPicker(false); }}
-                  >
-                    <span>{acc.name}</span>
-                    <span className="account-balance">${acc.balance.toLocaleString()}</span>
+            {/* 代墊功能 - 只在支出模式顯示 */}
+            {mode === 'expense' && (
+              <div className="split-payment-section">
+                <div className="split-toggle-row" onClick={() => setIsSplitPayment(!isSplitPayment)}>
+                  <span className="split-label">💰 代墊付款</span>
+                  <div className={`toggle-switch ${isSplitPayment ? 'active' : ''}`}>
+                    <div className="toggle-knob"></div>
                   </div>
-                ))}
+                </div>
+
+                {isSplitPayment && (
+                  <div className="split-options">
+                    {/* 計算方式選擇 */}
+                    <div className="split-mode-tabs">
+                      <button
+                        className={`split-mode-tab ${!useCustomSplit ? 'active' : ''}`}
+                        onClick={() => setUseCustomSplit(false)}
+                      >
+                        按人數均分
+                      </button>
+                      <button
+                        className={`split-mode-tab ${useCustomSplit ? 'active' : ''}`}
+                        onClick={() => setUseCustomSplit(true)}
+                      >
+                        自訂代墊金額
+                      </button>
+                    </div>
+
+                    {!useCustomSplit ? (
+                      /* 人數選擇 */
+                      <div className="people-selector">
+                        <span className="people-label">分攤人數</span>
+                        <div className="people-buttons">
+                          {[2, 3, 4, 5, 6].map(num => (
+                            <button
+                              key={num}
+                              className={`people-btn ${splitPeople === num ? 'selected' : ''}`}
+                              onClick={() => setSplitPeople(num)}
+                            >
+                              {num}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      /* 自訂金額輸入 */
+                      <div className="custom-split-input">
+                        <span className="custom-split-label">代墊金額</span>
+                        <input
+                          type="number"
+                          className="note-input"
+                          placeholder="輸入他人應還金額"
+                          value={customSplitAmount}
+                          onChange={(e) => setCustomSplitAmount(e.target.value)}
+                          style={{ textAlign: 'right' }}
+                        />
+                      </div>
+                    )}
+
+                    {/* 計算結果顯示 */}
+                    {amount && (
+                      <div className="split-summary">
+                        <div className="split-summary-row">
+                          <span>總金額</span>
+                          <span className="split-total">${parseFloat(amount).toLocaleString()}</span>
+                        </div>
+                        <div className="split-summary-row">
+                          <span>代墊（他人還款）</span>
+                          <span className="split-others">${splitAmount.toLocaleString()}</span>
+                        </div>
+                        <div className="split-summary-row highlight">
+                          <span>你的支出</span>
+                          <span className="split-own">-${ownAmount.toLocaleString()}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
@@ -440,6 +623,29 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
           background: var(--color-accent);
         }
 
+        .mode-tab.active.repayment {
+          background: #10b981;
+        }
+
+        /* 還款資訊 */
+        .repayment-info {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 8px;
+          padding: 20px;
+          background: var(--bg-secondary);
+          border-radius: 12px;
+          margin-bottom: 16px;
+          border: 1px dashed var(--border-medium);
+        }
+
+        .repayment-text {
+          font-size: 0.85rem;
+          color: var(--text-secondary);
+          text-align: center;
+        }
+
         /* 金額卡片 */
         .amount-card {
           background: var(--bg-secondary);
@@ -466,6 +672,10 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
 
         .amount-card.transfer .amount-value {
           color: var(--color-accent);
+        }
+
+        .amount-card.repayment .amount-value {
+          color: #10b981;
         }
 
         .amount-label {
@@ -536,7 +746,51 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
           font-size: 0.75rem;
         }
 
-        /* 帳戶選擇 */
+        /* 帳戶卡片 - 和分類風格一致 */
+        .account-cards {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 8px;
+          margin-bottom: 16px;
+        }
+
+        .account-card {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 4px;
+          padding: 12px 8px;
+          border: none;
+          border-radius: 12px;
+          background: var(--bg-secondary);
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+
+        .account-card.selected {
+          background: var(--color-accent);
+        }
+
+        .account-card-name {
+          font-size: 0.85rem;
+          font-weight: 600;
+          color: var(--text-primary);
+        }
+
+        .account-card.selected .account-card-name {
+          color: white;
+        }
+
+        .account-card-balance {
+          font-size: 0.7rem;
+          color: var(--text-secondary);
+        }
+
+        .account-card.selected .account-card-balance {
+          color: rgba(255, 255, 255, 0.8);
+        }
+
+        /* 保留舊的 account-row 給轉帳/還款模式使用 */
         .account-row {
           display: flex;
           justify-content: space-between;
@@ -546,16 +800,18 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
           border-radius: 12px;
           margin-bottom: 12px;
           cursor: pointer;
+          border-left: 4px solid var(--color-accent);
         }
 
         .account-label {
-          color: var(--text-secondary);
+          color: var(--text-primary);
           font-size: 0.9rem;
+          font-weight: 500;
         }
 
         .account-value {
-          color: var(--text-primary);
-          font-weight: 500;
+          color: var(--color-accent);
+          font-weight: 600;
         }
 
         .account-dropdown {
@@ -585,6 +841,31 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
         .account-balance {
           color: var(--text-secondary);
           font-size: 0.85rem;
+        }
+
+        /* 轉帳子模式切換 */
+        .transfer-sub-tabs {
+          display: flex;
+          gap: 8px;
+          margin-bottom: 16px;
+        }
+
+        .transfer-sub-tab {
+          flex: 1;
+          padding: 10px 12px;
+          border: 1px solid var(--border-light);
+          border-radius: 10px;
+          background: transparent;
+          color: var(--text-secondary);
+          font-size: 0.85rem;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+
+        .transfer-sub-tab.active {
+          background: var(--color-accent);
+          border-color: var(--color-accent);
+          color: white;
         }
 
         /* 轉帳帳戶 */
@@ -618,6 +899,174 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
         .transfer-arrow {
           color: var(--text-tertiary);
           font-size: 1.2rem;
+        }
+
+        /* 代墊功能樣式 */
+        .split-payment-section {
+          background: var(--bg-secondary);
+          border-radius: 12px;
+          margin-bottom: 12px;
+          overflow: hidden;
+        }
+
+        .split-toggle-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 14px 16px;
+          cursor: pointer;
+        }
+
+        .split-label {
+          font-size: 0.9rem;
+          color: var(--text-primary);
+          font-weight: 500;
+        }
+
+        .toggle-switch {
+          width: 44px;
+          height: 24px;
+          background: var(--border-medium);
+          border-radius: 12px;
+          position: relative;
+          transition: background 0.2s;
+        }
+
+        .toggle-switch.active {
+          background: var(--color-accent);
+        }
+
+        .toggle-knob {
+          width: 20px;
+          height: 20px;
+          background: white;
+          border-radius: 50%;
+          position: absolute;
+          top: 2px;
+          left: 2px;
+          transition: transform 0.2s;
+        }
+
+        .toggle-switch.active .toggle-knob {
+          transform: translateX(20px);
+        }
+
+        .split-options {
+          padding: 0 16px 16px;
+          border-top: 1px solid var(--border-light);
+        }
+
+        .split-mode-tabs {
+          display: flex;
+          gap: 8px;
+          margin: 12px 0;
+        }
+
+        .split-mode-tab {
+          flex: 1;
+          padding: 8px 12px;
+          border: 1px solid var(--border-light);
+          border-radius: 8px;
+          background: transparent;
+          color: var(--text-secondary);
+          font-size: 0.8rem;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+
+        .split-mode-tab.active {
+          background: var(--color-accent-bg);
+          border-color: var(--color-accent);
+          color: var(--color-accent);
+        }
+
+        .people-selector {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 12px;
+        }
+
+        .people-label {
+          font-size: 0.85rem;
+          color: var(--text-secondary);
+        }
+
+        .people-buttons {
+          display: flex;
+          gap: 6px;
+        }
+
+        .people-btn {
+          width: 36px;
+          height: 36px;
+          border: 1px solid var(--border-light);
+          border-radius: 8px;
+          background: transparent;
+          color: var(--text-primary);
+          font-size: 0.9rem;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+
+        .people-btn.selected {
+          background: var(--color-accent);
+          border-color: var(--color-accent);
+          color: white;
+        }
+
+        .custom-split-input {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 12px;
+          margin-bottom: 12px;
+        }
+
+        .custom-split-label {
+          font-size: 0.85rem;
+          color: var(--text-secondary);
+          white-space: nowrap;
+        }
+
+        .custom-split-input .note-input {
+          flex: 1;
+          margin: 0;
+        }
+
+        .split-summary {
+          background: var(--bg-primary);
+          border-radius: 8px;
+          padding: 12px;
+        }
+
+        .split-summary-row {
+          display: flex;
+          justify-content: space-between;
+          padding: 6px 0;
+          font-size: 0.85rem;
+          color: var(--text-secondary);
+        }
+
+        .split-summary-row.highlight {
+          border-top: 1px dashed var(--border-light);
+          margin-top: 6px;
+          padding-top: 12px;
+          font-weight: 600;
+          color: var(--text-primary);
+        }
+
+        .split-total {
+          color: var(--text-primary);
+        }
+
+        .split-others {
+          color: var(--color-accent);
+        }
+
+        .split-own {
+          color: var(--color-expense);
+          font-size: 1rem;
         }
 
         /* 名稱建議 */
@@ -683,6 +1132,10 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
 
         .submit-btn.transfer {
           background: var(--color-accent);
+        }
+
+        .submit-btn.repayment {
+          background: #10b981;
         }
 
         .submit-btn:disabled {

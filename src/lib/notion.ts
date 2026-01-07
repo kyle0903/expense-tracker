@@ -205,8 +205,8 @@ export async function getSummary(year: number, month?: number): Promise<Summary>
   const byCategoryIncome: Record<string, number> = {};
 
   for (const tx of transactions) {
-    // 排除轉帳交易，不計入收支摘要
-    if (tx.category === '轉帳') {
+    // 排除轉帳和代墊還款交易，不計入收支摘要
+    if (tx.category === '轉帳' || tx.category === '代墊還款') {
       continue;
     }
 
