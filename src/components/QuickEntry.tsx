@@ -401,7 +401,8 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
           </>
         ) : (
           <>
-            {/* 分類選擇 - Grid 佈局 */}
+            {/* 分類選擇 */}
+            <div className="section-label">分類</div>
             <div className="category-grid">
               {categories.map((cat) => (
                 <button
@@ -415,21 +416,7 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
               ))}
             </div>
 
-            {/* 帳戶選擇 - 卡片式 */}
-            <div className="account-cards">
-              {accounts.map((acc) => (
-                <button
-                  key={acc.id}
-                  onClick={() => setAccount(acc.name)}
-                  className={`account-card ${account === acc.name ? 'selected' : ''}`}
-                >
-                  <span className="account-card-name">{acc.name}</span>
-                  <span className="account-card-balance">${acc.balance.toLocaleString()}</span>
-                </button>
-              ))}
-            </div>
-
-            {/* 代墊功能 - 只在支出模式顯示 */}
+            {/* 代墊功能 - 只在支出模式顯示，放在帳戶上面 */}
             {mode === 'expense' && (
               <div className="split-payment-section">
                 <div className="split-toggle-row" onClick={() => setIsSplitPayment(!isSplitPayment)}>
@@ -509,6 +496,21 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
                 )}
               </div>
             )}
+
+            {/* 帳戶選擇 - 卡片式 */}
+            <div className="section-label">帳戶</div>
+            <div className="account-cards">
+              {accounts.map((acc) => (
+                <button
+                  key={acc.id}
+                  onClick={() => setAccount(acc.name)}
+                  className={`account-card ${account === acc.name ? 'selected' : ''}`}
+                >
+                  <span className="account-card-name">{acc.name}</span>
+                  <span className="account-card-balance">${acc.balance.toLocaleString()}</span>
+                </button>
+              ))}
+            </div>
 
             {/* 名稱建議 */}
             {category && CATEGORY_SUGGESTIONS[category] && (
@@ -744,6 +746,16 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
 
         .category-name {
           font-size: 0.75rem;
+        }
+
+        /* 區塊標籤 */
+        .section-label {
+          font-size: 0.8rem;
+          font-weight: 500;
+          color: var(--text-secondary);
+          margin-bottom: 10px;
+          margin-top: 8px;
+          padding-left: 4px;
         }
 
         /* 帳戶卡片 - 和分類風格一致 */
