@@ -181,7 +181,7 @@ class EInvoiceScraper:
                         continue
 
                     element.click()
-                    time.sleep(2)
+                    time.sleep(1)
                     return True
                 except:
                     continue
@@ -205,7 +205,7 @@ class EInvoiceScraper:
 
         # 前往「手機條碼發票查詢」頁面，會自動導向登入
         self.driver.get(self.MOBILE_CARRIER_URL)
-        time.sleep(3)
+        time.sleep(1)
 
         wait = WebDriverWait(self.driver, 15)
 
@@ -268,7 +268,7 @@ class EInvoiceScraper:
                 submit_btn.click()
 
                 # 等待登入結果
-                time.sleep(3)
+                time.sleep(1)
 
                 # 檢查是否登入成功 (查看是否有錯誤訊息或已跳轉)
                 current_url = self.driver.current_url
@@ -311,7 +311,7 @@ class EInvoiceScraper:
 
             except TimeoutException:
                 self.driver.refresh()
-                time.sleep(2)
+                time.sleep(1)
 
             except Exception:
                 pass

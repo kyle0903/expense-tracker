@@ -296,7 +296,7 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
       </div>
 
       {/* 快速選項區 */}
-      <div className="quick-options">
+      <div className={`quick-options ${mode}`}>
         {mode === 'transfer' ? (
           <>
             {/* 轉帳子模式切換 */}
@@ -361,11 +361,6 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
               </>
             ) : (
               <>
-                {/* 還款 UI */}
-                <div className="repayment-info">
-                  <div className="repayment-text">還你的錢將存入選擇的帳戶（不計入收入統計）</div>
-                </div>
-
                 {/* 帳戶選擇 - 卡片式 */}
                 <div className="account-cards">
                   {accounts.map((acc) => (
@@ -740,6 +735,16 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
           color: white;
         }
 
+        /* 支出模式 - 分類選中用紅色 */
+        .quick-options.expense .category-item.selected {
+          background: var(--color-expense);
+        }
+
+        /* 收入模式 - 分類選中用綠色 */
+        .quick-options.income .category-item.selected {
+          background: var(--color-income);
+        }
+
         .category-icon {
           font-size: 1.25rem;
         }
@@ -781,6 +786,51 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
 
         .account-card.selected {
           background: var(--color-accent);
+        }
+
+        /* 支出模式 - 帳戶選中用淺紅色 */
+        .quick-options.expense .account-card.selected {
+          background: rgba(239, 68, 68, 0.2);
+          border: 1px solid var(--color-expense);
+        }
+
+        .quick-options.expense .account-card.selected .account-card-name {
+          color: var(--color-expense);
+        }
+
+        .quick-options.expense .account-card.selected .account-card-balance {
+          color: var(--color-expense);
+          opacity: 0.8;
+        }
+
+        /* 轉帳模式 - 帳戶選中用淺藍色 */
+        .quick-options.transfer .account-card.selected {
+          background: rgba(59, 130, 246, 0.2);
+          border: 1px solid var(--color-accent);
+        }
+
+        .quick-options.transfer .account-card.selected .account-card-name {
+          color: var(--color-accent);
+        }
+
+        .quick-options.transfer .account-card.selected .account-card-balance {
+          color: var(--color-accent);
+          opacity: 0.8;
+        }
+
+        /* 收入模式 - 帳戶選中用淺綠色 */
+        .quick-options.income .account-card.selected {
+          background: rgba(34, 197, 94, 0.2);
+          border: 1px solid var(--color-income);
+        }
+
+        .quick-options.income .account-card.selected .account-card-name {
+          color: var(--color-income);
+        }
+
+        .quick-options.income .account-card.selected .account-card-balance {
+          color: var(--color-income);
+          opacity: 0.8;
         }
 
         .account-card-name {
@@ -949,6 +999,11 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
           background: var(--color-accent);
         }
 
+        /* 支出模式 - toggle 用紅色 */
+        .quick-options.expense .toggle-switch.active {
+          background: var(--color-expense);
+        }
+
         .toggle-knob {
           width: 20px;
           height: 20px;
@@ -993,6 +1048,13 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
           color: var(--color-accent);
         }
 
+        /* 支出模式 - 代墊選項用紅色 */
+        .quick-options.expense .split-mode-tab.active {
+          background: rgba(239, 68, 68, 0.1);
+          border-color: var(--color-expense);
+          color: var(--color-expense);
+        }
+
         .people-selector {
           display: flex;
           justify-content: space-between;
@@ -1026,6 +1088,12 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
           background: var(--color-accent);
           border-color: var(--color-accent);
           color: white;
+        }
+
+        /* 支出模式 - 人數按鈕用紅色 */
+        .quick-options.expense .people-btn.selected {
+          background: var(--color-expense);
+          border-color: var(--color-expense);
         }
 
         .custom-split-input {
@@ -1105,6 +1173,20 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
           background: var(--color-accent-bg);
           border-color: var(--color-accent);
           color: var(--color-accent);
+        }
+
+        /* 支出模式 - 名稱建議用紅色 */
+        .quick-options.expense .suggestion-chip.selected {
+          background: rgba(239, 68, 68, 0.1);
+          border-color: var(--color-expense);
+          color: var(--color-expense);
+        }
+
+        /* 收入模式 - 名稱建議用綠色 */
+        .quick-options.income .suggestion-chip.selected {
+          background: rgba(34, 197, 94, 0.1);
+          border-color: var(--color-income);
+          color: var(--color-income);
         }
 
         /* 備註輸入 */
