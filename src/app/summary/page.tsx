@@ -6,6 +6,33 @@ import type { Summary, Transaction } from '@/types';
 type CategoryTab = 'expense' | 'income';
 type TransactionFilter = 'all' | 'expense' | 'income';
 
+// 格式化日期時間顯示 (將 ISO 格式轉換為易讀的 MM/DD HH:mm)
+function formatDateTime(dateStr: string): string {
+  if (!dateStr) return '';
+  
+  try {
+    // 嘗試解析為 Date 物件
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) {
+      return dateStr; // 無法解析，直接返回原字串
+    }
+    
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    
+    // 如果時間是 00:00，只顯示日期
+    if (hours === '00' && minutes === '00') {
+      return `${month}/${day}`;
+    }
+    
+    return `${month}/${day} ${hours}:${minutes}`;
+  } catch {
+    return dateStr;
+  }
+}
+
 export default function SummaryPage() {
   const [summary, setSummary] = useState<{ monthly: Summary; yearly: Summary } | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -101,7 +128,7 @@ export default function SummaryPage() {
           color: 'var(--text-primary)',
           margin: 0,
         }}>
-          摘要
+          報表
         </h1>
       </header>
 
@@ -410,7 +437,7 @@ export default function SummaryPage() {
                     color: 'var(--text-secondary)',
                     marginTop: '2px',
                   }}>
-                    {tx.category} · {tx.account} · {tx.date}
+                    {tx.category} · {tx.account} · {formatDateTime(tx.date)}
                   </div>
                 </div>
                 <div 
