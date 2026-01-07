@@ -77,8 +77,7 @@ export default function InvoicesPage() {
   // 進入頁面時自動同步發票到 Notion
   useEffect(() => {
     syncInvoicesToNotion();
-    fetchNotionInvoices();
-  }, [fetchNotionInvoices]);
+  }, []);
 
   // 呼叫爬蟲 API 同步發票到 Notion
   const syncInvoicesToNotion = async () => {
@@ -98,9 +97,7 @@ export default function InvoicesPage() {
       });
 
       // 同步完成後重新取得 Notion 發票清單
-      if (data.success) {
-        fetchNotionInvoices();
-      }
+      fetchNotionInvoices();
     } catch (err) {
       setSyncResult({
         success: false,
@@ -109,6 +106,8 @@ export default function InvoicesPage() {
         skipped_count: 0,
       });
       console.error('Sync error:', err);
+      // 即使同步失敗，也嘗試取得現有的發票清單
+      fetchNotionInvoices();
     } finally {
       setSyncing(false);
     }

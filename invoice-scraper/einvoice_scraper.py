@@ -205,103 +205,69 @@ class EInvoiceScraper:
 
         # 前往「手機條碼發票查詢」頁面，會自動導向登入
         self.driver.get(self.MOBILE_CARRIER_URL)
-        time.sleep(1)
+        time.sleep(2)
 
         wait = WebDriverWait(self.driver, 15)
 
         for attempt in range(max_retries):
             try:
-
                 # 等待登入表單載入
-                # 尋找手機號碼輸入框 (id="mobile_phone")
-                phone_input = wait.until(EC.presence_of_element_located((
-                    By.ID, "mobile_phone"
-                )))
-
-                # 尋找密碼輸入框 (id="password")
+                phone_input = wait.until(EC.presence_of_element_located((By.ID, "mobile_phone")))
                 password_input = self.driver.find_element(By.ID, "password")
-
-                # 尋找驗證碼輸入框 (id="captcha")
                 captcha_input = self.driver.find_element(By.ID, "captcha")
+                captcha_img = self.driver.find_element(By.XPATH, "//img[@alt='圖形驗證碼']")
+                refresh_captcha_btn = self.driver.find_element(By.XPATH, "//button[@aria-label='更新圖形驗證碼']")
 
-                # 尋找驗證碼圖片 (alt="圖形驗證碼")
-                captcha_img = self.driver.find_element(
-                    By.XPATH,
-                    "//img[@alt='圖形驗證碼']"
-                )
-
-                # 尋找更新驗證碼按鈕
-                refresh_captcha_btn = self.driver.find_element(
-                    By.XPATH,
-                    "//button[@aria-label='更新圖形驗證碼']"
-                )
-
-                # 清空並輸入手機號碼
+                # 輸入帳密
                 phone_input.clear()
                 phone_input.send_keys(self.phone)
-
-                # 清空並輸入密碼
                 password_input.clear()
                 password_input.send_keys(self.password)
 
-                # 等待驗證碼圖片載入
-                time.sleep(1)
+                time.sleep(1.5)
 
                 # 辨識驗證碼
                 captcha_text = self._recognize_captcha(captcha_img)
 
                 if len(captcha_text) != 5:
-                    # 點擊更新驗證碼按鈕
                     refresh_captcha_btn.click()
-                    time.sleep(1)
+                    time.sleep(1.5)
                     continue
 
-                # 輸入驗證碼
                 captcha_input.clear()
                 captcha_input.send_keys(captcha_text)
 
-                # 尋找並點擊登入按鈕 (在 ul.login_list 裡面)
+                # 點擊登入
                 submit_btn = self.driver.find_element(
                     By.XPATH,
                     "//ul[@class='login_list']//button | //button[contains(text(), '登入')] | //form//button[@type='submit']"
                 )
                 submit_btn.click()
+                time.sleep(3)
 
-                # 等待登入結果
-                time.sleep(1)
-
-                # 檢查是否登入成功 (查看是否有錯誤訊息或已跳轉)
                 current_url = self.driver.current_url
 
-                # 檢查是否有錯誤訊息
+                # 檢查錯誤訊息
                 try:
-                    error_msg = self.driver.find_element(
+                    self.driver.find_element(
                         By.XPATH,
                         "//*[contains(text(), '驗證碼錯誤') or contains(text(), '登入失敗') or contains(text(), '密碼錯誤')]"
                     )
-
-                    # 刷新驗證碼重試
                     try:
-                        refresh_btn = self.driver.find_element(
-                            By.XPATH,
-                            "//button[@aria-label='更新圖形驗證碼']"
-                        )
+                        refresh_btn = self.driver.find_element(By.XPATH, "//button[@aria-label='更新圖形驗證碼']")
                         refresh_btn.click()
-                        time.sleep(1)
+                        time.sleep(1.5)
                     except:
                         pass
                     continue
-
                 except NoSuchElementException:
-                    # 沒有錯誤訊息，可能登入成功
                     pass
 
-                # 檢查是否已離開登入頁面
+                # 檢查是否登入成功
                 if 'login' not in current_url.lower():
                     self._save_session()
                     return True
 
-                # 額外檢查：尋找登出按鈕
                 try:
                     self.driver.find_element(By.XPATH, "//*[contains(text(), '登出')]")
                     self._save_session()
@@ -311,10 +277,11 @@ class EInvoiceScraper:
 
             except TimeoutException:
                 self.driver.refresh()
-                time.sleep(1)
+                time.sleep(2)
 
             except Exception:
                 pass
+
         return False
 
     def _save_session(self):
@@ -324,26 +291,22 @@ class EInvoiceScraper:
 
         # 嘗試從 localStorage/sessionStorage 取得 JWT token
         try:
-            # 取得 localStorage
             local_storage = self.driver.execute_script(
                 "return Object.entries(localStorage).reduce((acc, [k, v]) => ({...acc, [k]: v}), {});"
             )
-            # 取得 sessionStorage
             session_storage = self.driver.execute_script(
                 "return Object.entries(sessionStorage).reduce((acc, [k, v]) => ({...acc, [k]: v}), {});"
             )
 
-            # 尋找 token (可能的 key: token, authToken, jwt, accessToken 等)
             token_keys = ['token', 'authToken', 'jwt', 'accessToken', 'jwtToken', 'auth_token', 'access_token']
             for storage_name, storage in [('localStorage', local_storage), ('sessionStorage', session_storage)]:
                 for key in token_keys:
                     if key in storage:
                         self.auth_token = storage[key]
                         break
-                    # 也檢查包含這些關鍵字的 key
                     for k, v in storage.items():
                         if any(tk in k.lower() for tk in ['token', 'jwt', 'auth']):
-                            if isinstance(v, str) and len(v) > 50:  # JWT 通常很長
+                            if isinstance(v, str) and len(v) > 50:
                                 self.auth_token = v
                                 break
                 if self.auth_token:
@@ -352,7 +315,6 @@ class EInvoiceScraper:
         except Exception:
             pass
 
-        # 關閉瀏覽器，後續使用 requests
         self.driver.quit()
         self.driver = None
 
@@ -371,19 +333,15 @@ class EInvoiceScraper:
         if not self.cookies:
             raise Exception("尚未登入，請先呼叫 login()")
 
-
-
         invoices = []
 
         # 計算日期範圍 (使用台北時區)
-        # 注意: API 對查詢區間有限制，使用當月1日到今天
         from zoneinfo import ZoneInfo
         taipei_tz = ZoneInfo('Asia/Taipei')
         end_date = datetime.now(taipei_tz)
-        # 當月1日
         start_date = end_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
-        # API 端點 - 取得發票列表 (含 JWT token)
+
         api_url = "https://service-mc.einvoice.nat.gov.tw/btc/cloud/api/btc502w/getSearchCarrierInvoiceListJWT"
 
         headers = {
@@ -394,133 +352,101 @@ class EInvoiceScraper:
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         }
 
-        # 加入 JWT Authorization header
         if self.auth_token:
             headers['Authorization'] = f'Bearer {self.auth_token}'
 
-        # 請求 payload (日期格式: ISO 8601 UTC 格式，結尾為 Z)
-        # API 查詢區間限制較嚴格，使用當月1日到今天
+        # 轉換為 UTC 時間（台北 UTC+8）
+        from datetime import timezone
+        start_utc = start_date.astimezone(timezone.utc)
+        end_utc = end_date.astimezone(timezone.utc)
+
         payload = {
             "cardCode": "",
             "carrierId2": "",
             "invoiceStatus": "all",
-            "isSearchAll": "true",  # 字串格式
-            "searchStartDate": start_date.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
-            "searchEndDate": end_date.strftime('%Y-%m-%dT%H:%M:%S.000Z')
+            "isSearchAll": "true",
+            "searchStartDate": start_utc.strftime('%Y-%m-%dT%H:%M:%S.') + f"{start_utc.microsecond // 1000:03d}Z",
+            "searchEndDate": end_utc.strftime('%Y-%m-%dT%H:%M:%S.') + f"{end_utc.microsecond // 1000:03d}Z"
         }
-        
-
 
         try:
-            # 第一步：呼叫 API 取得查詢用的 JWT token
-            response = requests.post(
-                api_url,
-                headers=headers,
-                cookies=self.cookies,
-                json=payload,
-                timeout=30
-            )
+            # 步驟1: 取得查詢用的 JWT token
+            response = requests.post(api_url, headers=headers, cookies=self.cookies, json=payload, timeout=30)
 
+            if response.status_code != 200:
+                return invoices
 
+            jwt_token = response.text.strip()
 
-            if response.status_code == 200 and response.text:
-                jwt_token = response.text.strip()
-                
-                # 第二步：使用 token 作為 payload 呼叫 searchCarrierInvoice
-                search_url = "https://service-mc.einvoice.nat.gov.tw/btc/cloud/api/btc502w/searchCarrierInvoice"
-                
-                search_headers = {
-                    'Accept': 'application/json, text/plain, */*',
-                    'Content-Type': 'application/json',
-                    'Authorization': f'Bearer {self.auth_token}' if self.auth_token else '',
-                    'Origin': 'https://www.einvoice.nat.gov.tw',
-                    'Referer': 'https://www.einvoice.nat.gov.tw/',
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                }
-                
-                # payload 是 { token: "JWT字串" }
-                search_payload = {"token": jwt_token}
-                
-                search_response = requests.post(
-                    search_url,
-                    headers=search_headers,
-                    cookies=self.cookies,
-                    json=search_payload,
-                    timeout=30
-                )
-                
+            # 步驟2: 查詢發票列表
+            search_url = "https://service-mc.einvoice.nat.gov.tw/btc/cloud/api/btc502w/searchCarrierInvoice"
+            search_headers = {
+                'Accept': 'application/json, text/plain, */*',
+                'Content-Type': 'application/json',
+                'Authorization': f'Bearer {self.auth_token}' if self.auth_token else '',
+                'Origin': 'https://www.einvoice.nat.gov.tw',
+                'Referer': 'https://www.einvoice.nat.gov.tw/',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+            search_payload = {"token": jwt_token}
 
-                
-                if search_response.status_code == 200 and search_response.text:
-                    data = search_response.json()
-                    
-                    # 解析回應中的發票列表 (在 content 欄位)
-                    invoice_list = data.get('content', [])
-                    
-                    if isinstance(invoice_list, list) and len(invoice_list) > 0:
-                        for item in invoice_list:
-                            # 取得發票的 token 來查詢完整資料
-                            invoice_token = item.get('token', '')
-                            
-                            # 先取得發票號碼
-                            invoice_number = item.get('invoiceNumber', '')
-                            
-                            # 透過 getCarrierInvoiceData API 取得正確的日期、金額、店家
-                            invoice_date = None
-                            seller_name = None
-                            amount = None
-                            details = None
-                            
-                            if invoice_token:
-                                invoice_data = self._get_invoice_data(invoice_token)
-                                if invoice_data:
-                                    # 組合 invoiceDate (YYYYMMDD) + invoiceTime (HH:MM:SS) 為完整日期時間
-                                    raw_date = invoice_data.get('invoiceDate', '')  # "20260105"
-                                    raw_time = invoice_data.get('invoiceTime', '')  # "15:49:41"
-                                    
-                                    if raw_date and len(raw_date) == 8:
-                                        # 轉換 YYYYMMDD 為 YYYY-MM-DD
-                                        formatted_date = f"{raw_date[:4]}-{raw_date[4:6]}-{raw_date[6:8]}"
-                                        if raw_time:
-                                            # 組合日期和時間，加上台北時區
-                                            invoice_date = f"{formatted_date}T{raw_time}+08:00"
-                                        else:
-                                            invoice_date = f"{formatted_date}T00:00:00+08:00"
-                                    
-                                    # 取得正確的金額
-                                    total_amount = invoice_data.get('totalAmount', '')
-                                    if total_amount:
-                                        amount = int(total_amount)
-                                    
-                                    # 取得正確的店家名稱
-                                    seller_name = invoice_data.get('sellerName', '')
-                                    
-                                    # 同時取得明細
-                                    details = self._get_invoice_details(invoice_token)
-                            
-                            # 如果沒有從 API 取得資料，使用列表中的資料作為 fallback
-                            if not invoice_date:
-                                invoice_date_raw = item.get('invoiceDate', '')
-                                if invoice_date_raw:
-                                    invoice_date = str(invoice_date_raw)
+            search_response = requests.post(search_url, headers=search_headers, cookies=self.cookies, json=search_payload, timeout=30)
+
+            if search_response.status_code != 200:
+                return invoices
+
+            data = search_response.json()
+            invoice_list = data.get('content', [])
+
+            if isinstance(invoice_list, list) and len(invoice_list) > 0:
+                for item in invoice_list:
+                    invoice_token = item.get('token', '')
+                    invoice_number = item.get('invoiceNumber', '')
+
+                    invoice_date = None
+                    seller_name = None
+                    amount = None
+                    details = None
+
+                    if invoice_token:
+                        invoice_data = self._get_invoice_data(invoice_token)
+                        if invoice_data:
+                            raw_date = invoice_data.get('invoiceDate', '')
+                            raw_time = invoice_data.get('invoiceTime', '')
+
+                            if raw_date and len(raw_date) == 8:
+                                formatted_date = f"{raw_date[:4]}-{raw_date[4:6]}-{raw_date[6:8]}"
+                                if raw_time:
+                                    invoice_date = f"{formatted_date}T{raw_time}+08:00"
                                 else:
-                                    invoice_date = datetime.now().strftime('%Y-%m-%dT%H:%M:%S+08:00')
-                            
-                            if not seller_name:
-                                seller_name = item.get('sellerName', '未知商店')
-                            
-                            if amount is None:
-                                amount = int(item.get('totalAmount', 0))
-                            
-                            invoice = Invoice(
-                                invoice_number=invoice_number,
-                                invoice_date=invoice_date,
-                                seller_name=seller_name,
-                                amount=amount,
-                                details=details
-                            )
-                            invoices.append(invoice)
+                                    invoice_date = f"{formatted_date}T00:00:00+08:00"
 
+                            total_amount = invoice_data.get('totalAmount', '')
+                            if total_amount:
+                                amount = int(total_amount)
+
+                            seller_name = invoice_data.get('sellerName', '')
+                            details = self._get_invoice_details(invoice_token)
+
+                    # Fallback
+                    if not invoice_date:
+                        invoice_date_raw = item.get('invoiceDate', '')
+                        invoice_date = str(invoice_date_raw) if invoice_date_raw else datetime.now().strftime('%Y-%m-%dT%H:%M:%S+08:00')
+
+                    if not seller_name:
+                        seller_name = item.get('sellerName', '未知商店')
+
+                    if amount is None:
+                        amount = int(item.get('totalAmount', 0))
+
+                    invoice = Invoice(
+                        invoice_number=invoice_number,
+                        invoice_date=invoice_date,
+                        seller_name=seller_name,
+                        amount=amount,
+                        details=details
+                    )
+                    invoices.append(invoice)
 
         except Exception:
             pass
