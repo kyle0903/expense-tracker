@@ -83,6 +83,8 @@ class EInvoiceScraper:
     def _try_cached_session(self) -> bool:
         """嘗試使用緩存的 session"""
         import requests
+        from datetime import timezone
+        from zoneinfo import ZoneInfo
 
         if not self._is_session_valid():
             return False
@@ -90,17 +92,35 @@ class EInvoiceScraper:
         cache = EInvoiceScraper._session_cache
         print(f"[SESSION] 嘗試使用緩存的 session...")
 
-        # 用一個簡單的 API 測試 session 是否有效
-        test_url = "https://service-mc.einvoice.nat.gov.tw/btc/cloud/api/common/getMemberInfo"
+        # 用發票查詢 API 測試 session 是否有效
+        test_url = "https://service-mc.einvoice.nat.gov.tw/btc/cloud/api/btc502w/getSearchCarrierInvoiceListJWT"
         headers = {
-            'Accept': 'application/json',
-            'Authorization': f'Bearer {cache["auth_token"]}' if cache['auth_token'] else '',
+            'Accept': 'application/json, text/plain, */*',
+            'Content-Type': 'application/json',
             'Origin': 'https://www.einvoice.nat.gov.tw',
             'Referer': 'https://www.einvoice.nat.gov.tw/',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+
+        if cache['auth_token']:
+            headers['Authorization'] = f'Bearer {cache["auth_token"]}'
+
+        # 只查詢今天的資料來測試
+        taipei_tz = ZoneInfo('Asia/Taipei')
+        now = datetime.now(taipei_tz)
+        now_utc = now.astimezone(timezone.utc)
+
+        payload = {
+            "cardCode": "",
+            "carrierId2": "",
+            "invoiceStatus": "all",
+            "isSearchAll": "true",
+            "searchStartDate": now_utc.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
+            "searchEndDate": now_utc.strftime('%Y-%m-%dT%H:%M:%S.000Z')
         }
 
         try:
-            response = requests.get(test_url, headers=headers, cookies=cache['cookies'], timeout=5)
+            response = requests.post(test_url, json=payload, headers=headers, cookies=cache['cookies'], timeout=5)
             if response.status_code == 200:
                 # Session 有效，使用緩存
                 self.cookies = cache['cookies']
@@ -129,6 +149,9 @@ class EInvoiceScraper:
 
         if self.headless:
             options.add_argument('--headless=new')
+
+        # 頁面載入策略：eager = DOM 準備好就繼續，不等待所有資源
+        options.page_load_strategy = 'eager'
 
         # 基本設定
         options.add_argument('--no-sandbox')
@@ -302,7 +325,7 @@ class EInvoiceScraper:
         # 不用 sleep，直接用 WebDriverWait 等待表單載入
         print(f"[LOGIN] 2. 載入登入頁面: {time.time() - stage_start:.2f} 秒")
 
-        wait = WebDriverWait(self.driver, 15)
+        wait = WebDriverWait(self.driver, 10)  # 減少等待時間
         short_wait = WebDriverWait(self.driver, 5)
 
         for attempt in range(max_retries):
