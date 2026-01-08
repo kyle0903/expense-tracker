@@ -320,7 +320,7 @@ class EInvoiceScraper:
         self.driver.quit()
         self.driver = None
 
-    def get_invoices() -> List[Invoice]:
+    def get_invoices(self) -> List[Invoice]:
         """
         使用 requests 取得發票列表
 
