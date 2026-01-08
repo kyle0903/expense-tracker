@@ -6,14 +6,10 @@
 import os
 import re
 import time
-import json
-import sys
 import base64
-from io import BytesIO
-from datetime import datetime, timedelta
-from dataclasses import dataclass, asdict
+from datetime import datetime
+from dataclasses import dataclass
 from typing import Optional, List
-from pathlib import Path
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -201,6 +197,7 @@ class EInvoiceScraper:
         Returns:
             是否登入成功
         """
+        start_time = time.time()
         self._init_driver()
 
         # 前往「手機條碼發票查詢」頁面，會自動導向登入
@@ -284,6 +281,8 @@ class EInvoiceScraper:
             except Exception:
                 pass
 
+        print("[LOGIN] 登入耗時: {} 秒".format(time.time() - start_time))
+
         return False
 
     def _save_session(self):
@@ -328,6 +327,8 @@ class EInvoiceScraper:
             發票列表
         """
         import requests
+
+        start_time = time.time()
 
         if not self.cookies:
             raise Exception("尚未登入，請先呼叫 login()")
@@ -449,6 +450,8 @@ class EInvoiceScraper:
 
         except Exception:
             pass
+
+        print("[GET_INVOICES] 取得發票耗時: {} 秒".format(time.time() - start_time))
 
         return invoices
     
@@ -622,59 +625,3 @@ class EInvoiceScraper:
         """關閉瀏覽器"""
         if self.driver:
             self.driver.quit()
-
-
-def main():
-    """主程式"""
-    load_dotenv()
-
-    phone = os.getenv('EINVOICE_PHONE')
-    password = os.getenv('EINVOICE_PASSWORD')
-
-    if not phone or not password:
-        sys.exit(1)
-
-
-
-    scraper = EInvoiceScraper(
-        phone=phone,
-        password=password,
-        headless=True  # 首次使用建議設為 False 以便觀察
-    )
-
-    try:
-        # 登入
-        print("[LOGIN] 登入")
-        start_time = time.time()
-        if not scraper.login():
-            sys.exit(1)
-        
-        print("[LOGIN] 登入耗時: {} 秒".format(time.time() - start_time))
-
-        start_time = time.time()
-        # 取得發票
-        print("[GET_INVOICES] 取得發票")
-        invoices = scraper.get_invoices()
-        print("[GET_INVOICES] 取得發票耗時: {} 秒".format(time.time() - start_time))
-
-
-        # 轉換為 JSON 格式
-        result = []
-        for inv in invoices:
-            result.append({
-                "日期": inv.invoice_date,
-                "發票號碼": inv.invoice_number,
-                "店家": inv.seller_name,
-                "金額": inv.amount,
-                "明細": inv.details
-            })
-
-    except Exception:
-        pass
-
-    finally:
-        scraper.close()
-
-
-if __name__ == "__main__":
-    main()
