@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useAuthFetch } from '@/hooks/useAuthFetch';
 import type { Summary, Transaction } from '@/types';
 
 type CategoryTab = 'expense' | 'income';
@@ -34,6 +35,7 @@ function formatDateTime(dateStr: string): string {
 }
 
 export default function SummaryPage() {
+  const authFetch = useAuthFetch();
   const [summary, setSummary] = useState<{ monthly: Summary; yearly: Summary } | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,8 +60,8 @@ export default function SummaryPage() {
       const endDate = `${year}-${String(month).padStart(2, '0')}-${lastDay}`;
 
       const [summaryRes, transactionsRes] = await Promise.all([
-        fetch(`/api/summary?year=${year}&month=${month}`),
-        fetch(`/api/transactions?startDate=${startDate}&endDate=${endDate}`),
+        authFetch(`/api/summary?year=${year}&month=${month}`),
+        authFetch(`/api/transactions?startDate=${startDate}&endDate=${endDate}`),
       ]);
 
       const summaryData = await summaryRes.json();
@@ -76,7 +78,7 @@ export default function SummaryPage() {
     } finally {
       setLoading(false);
     }
-  }, [year, month]);
+  }, [year, month, authFetch]);
 
   useEffect(() => {
     loadData();

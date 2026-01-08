@@ -2,12 +2,14 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { useAuthFetch } from '@/hooks/useAuthFetch';
 import type { Transaction, Account } from '@/types';
 import { TransactionList } from '@/components/TransactionList';
 
 export default function AccountDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const authFetch = useAuthFetch();
   const accountId = params.accountId as string;
 
   const [account, setAccount] = useState<Account | null>(null);
@@ -15,9 +17,39 @@ export default function AccountDetailPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // 月份選擇器
+  const now = new Date();
+  const [selectedYear, setSelectedYear] = useState(now.getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
+
   // 編輯初始金額
   const [isEditingBalance, setIsEditingBalance] = useState(false);
   const [editBalance, setEditBalance] = useState('');
+
+  // 過濾選中月份的交易
+  const filteredTransactions = transactions.filter((tx) => {
+    const txDate = new Date(tx.date);
+    return txDate.getFullYear() === selectedYear && txDate.getMonth() + 1 === selectedMonth;
+  });
+
+  // 計算選中月份的交易加總
+  const monthlyTransactionSum = filteredTransactions
+    .reduce((sum, tx) => {
+      // 排除轉帳類型
+      if (tx.category === '轉帳') return sum;
+      return sum + tx.amount;
+    }, 0);
+
+  // 生成月份選項（最近12個月）
+  const monthOptions = [];
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    monthOptions.push({
+      year: d.getFullYear(),
+      month: d.getMonth() + 1,
+      label: `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}`,
+    });
+  }
 
   // 載入資料
   const loadData = useCallback(async () => {
@@ -26,7 +58,7 @@ export default function AccountDetailPage() {
     setLoading(true);
     try {
       // 先載入所有帳戶來取得帳戶資訊和名稱
-      const accRes = await fetch('/api/accounts');
+      const accRes = await authFetch('/api/accounts');
       const accData = await accRes.json();
       
       if (accData.success) {
@@ -37,7 +69,7 @@ export default function AccountDetailPage() {
           setAccount(currentAccount);
           
           // 取得該帳戶的交易記錄
-          const txRes = await fetch('/api/transactions');
+          const txRes = await authFetch('/api/transactions');
           const txData = await txRes.json();
           
           if (txData.success) {
@@ -54,7 +86,7 @@ export default function AccountDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [accountId]);
+  }, [accountId, authFetch]);
 
   useEffect(() => {
     loadData();
@@ -63,7 +95,7 @@ export default function AccountDetailPage() {
   // 更新交易
   const handleUpdate = async (transaction: Transaction) => {
     try {
-      const res = await fetch('/api/transactions', {
+      const res = await authFetch('/api/transactions', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(transaction),
@@ -85,7 +117,7 @@ export default function AccountDetailPage() {
     if (!confirm('確定要刪除這筆交易記錄嗎？')) return;
 
     try {
-      const res = await fetch(`/api/transactions?id=${id}`, {
+      const res = await authFetch(`/api/transactions?id=${id}`, {
         method: 'DELETE',
       });
       const data = await res.json();
@@ -115,7 +147,7 @@ export default function AccountDetailPage() {
     }
 
     try {
-      const res = await fetch('/api/accounts', {
+      const res = await authFetch('/api/accounts', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -215,107 +247,139 @@ export default function AccountDetailPage() {
           </div>
         </div>
         
-        {/* 初始金額和交易加總 */}
+        {/* 初始金額 */}
         <div style={{
           display: 'flex',
-          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: '8px',
           marginTop: '16px',
           paddingTop: '12px',
           borderTop: '1px solid var(--border-light)',
           fontSize: '0.875rem',
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ color: 'var(--text-secondary)' }}>初始金額：</span>
-            {isEditingBalance ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <input
-                  type="number"
-                  value={editBalance}
-                  onChange={(e) => setEditBalance(e.target.value)}
-                  style={{
-                    width: '100px',
-                    padding: '4px 8px',
-                    fontSize: '0.875rem',
-                    border: '1px solid var(--border-medium)',
-                    borderRadius: '4px',
-                    background: 'var(--bg-primary)',
-                    color: 'var(--text-primary)',
-                  }}
-                  autoFocus
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') saveInitialBalance();
-                    if (e.key === 'Escape') setIsEditingBalance(false);
-                  }}
-                />
-                <button
-                  onClick={saveInitialBalance}
-                  style={{
-                    padding: '4px 8px',
-                    fontSize: '0.75rem',
-                    background: 'var(--text-primary)',
-                    color: 'var(--bg-primary)',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                  }}
-                >
-                  儲存
-                </button>
-                <button
-                  onClick={() => setIsEditingBalance(false)}
-                  style={{
-                    padding: '4px 8px',
-                    fontSize: '0.75rem',
-                    background: 'var(--bg-tertiary)',
-                    color: 'var(--text-secondary)',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                  }}
-                >
-                  取消
-                </button>
-              </div>
-            ) : (
-              <>
-                <span>${account.initialBalance.toLocaleString()}</span>
-                <button
-                  onClick={startEditBalance}
-                  style={{
-                    padding: '2px 6px',
-                    fontSize: '0.7rem',
-                    background: 'transparent',
-                    color: 'var(--text-tertiary)',
-                    border: '1px solid var(--border-light)',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                  }}
-                >
-                  編輯
-                </button>
-              </>
-            )}
-          </div>
-          <div>
-            <span style={{ color: 'var(--text-secondary)' }}>交易加總：</span>
-            <span className={account.transactionSum >= 0 ? 'amount-income' : 'amount-expense'}>
-              {account.transactionSum >= 0 ? '+' : ''}${account.transactionSum.toLocaleString()}
-            </span>
-          </div>
+          <span style={{ color: 'var(--text-secondary)' }}>初始金額：</span>
+          {isEditingBalance ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <input
+                type="number"
+                value={editBalance}
+                onChange={(e) => setEditBalance(e.target.value)}
+                style={{
+                  width: '100px',
+                  padding: '4px 8px',
+                  fontSize: '0.875rem',
+                  border: '1px solid var(--border-medium)',
+                  borderRadius: '4px',
+                  background: 'var(--bg-primary)',
+                  color: 'var(--text-primary)',
+                }}
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') saveInitialBalance();
+                  if (e.key === 'Escape') setIsEditingBalance(false);
+                }}
+              />
+              <button
+                onClick={saveInitialBalance}
+                style={{
+                  padding: '4px 8px',
+                  fontSize: '0.75rem',
+                  background: 'var(--text-primary)',
+                  color: 'var(--bg-primary)',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                }}
+              >
+                儲存
+              </button>
+              <button
+                onClick={() => setIsEditingBalance(false)}
+                style={{
+                  padding: '4px 8px',
+                  fontSize: '0.75rem',
+                  background: 'var(--bg-tertiary)',
+                  color: 'var(--text-secondary)',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                }}
+              >
+                取消
+              </button>
+            </div>
+          ) : (
+            <>
+              <span>${account.initialBalance.toLocaleString()}</span>
+              <button
+                onClick={startEditBalance}
+                style={{
+                  padding: '2px 6px',
+                  fontSize: '0.7rem',
+                  background: 'transparent',
+                  color: 'var(--text-tertiary)',
+                  border: '1px solid var(--border-light)',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                }}
+              >
+                編輯
+              </button>
+            </>
+          )}
         </div>
       </div>
 
       {/* 交易記錄 */}
       <div>
-        <h2 style={{ 
-          fontSize: '0.875rem', 
-          fontWeight: 600,
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center',
           marginBottom: '12px',
         }}>
-          交易記錄 ({transactions.length})
-        </h2>
+          <h2 style={{ 
+            fontSize: '0.875rem', 
+            fontWeight: 600,
+            margin: 0,
+          }}>
+            交易記錄 ({filteredTransactions.length})
+          </h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <select
+              value={`${selectedYear}-${selectedMonth}`}
+              onChange={(e) => {
+                const [y, m] = e.target.value.split('-').map(Number);
+                setSelectedYear(y);
+                setSelectedMonth(m);
+              }}
+              style={{
+                padding: '4px 8px',
+                fontSize: '0.75rem',
+                border: '1px solid var(--border-medium)',
+                borderRadius: '4px',
+                background: 'var(--bg-secondary)',
+                color: 'var(--text-primary)',
+                cursor: 'pointer',
+              }}
+            >
+              {monthOptions.map((opt) => (
+                <option key={opt.label} value={`${opt.year}-${opt.month}`}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <span style={{ 
+              fontSize: '0.8125rem',
+              color: monthlyTransactionSum >= 0 ? 'var(--color-income)' : 'var(--color-expense)',
+              fontWeight: 600,
+            }}>
+              {monthlyTransactionSum >= 0 ? '+' : ''}${monthlyTransactionSum.toLocaleString()}
+            </span>
+          </div>
+        </div>
         <TransactionList
-          transactions={transactions}
+          transactions={filteredTransactions}
           accounts={accounts}
           onUpdate={handleUpdate}
           onDelete={handleDelete}

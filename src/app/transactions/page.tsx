@@ -1,12 +1,14 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useAuthFetch } from '@/hooks/useAuthFetch';
 import type { Transaction, Account } from '@/types';
 import { TransactionList } from '@/components/TransactionList';
 
 type TransactionFilter = 'all' | 'expense' | 'income' | 'transfer';
 
 export default function TransactionsPage() {
+  const authFetch = useAuthFetch();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
@@ -26,8 +28,8 @@ export default function TransactionsPage() {
       const endDate = `${year}-${String(month).padStart(2, '0')}-${lastDay}`;
 
       const [txRes, accRes] = await Promise.all([
-        fetch(`/api/transactions?startDate=${startDate}&endDate=${endDate}`),
-        fetch('/api/accounts'),
+        authFetch(`/api/transactions?startDate=${startDate}&endDate=${endDate}`),
+        authFetch('/api/accounts'),
       ]);
 
       const txData = await txRes.json();
@@ -44,7 +46,7 @@ export default function TransactionsPage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedMonth]);
+  }, [selectedMonth, authFetch]);
 
   useEffect(() => {
     loadData();
@@ -53,7 +55,7 @@ export default function TransactionsPage() {
   // 更新交易
   const handleUpdate = async (transaction: Transaction) => {
     try {
-      const res = await fetch('/api/transactions', {
+      const res = await authFetch('/api/transactions', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(transaction),
@@ -75,7 +77,7 @@ export default function TransactionsPage() {
     if (!confirm('確定要刪除這筆交易記錄嗎？')) return;
     
     try {
-      const res = await fetch(`/api/transactions?id=${id}`, {
+      const res = await authFetch(`/api/transactions?id=${id}`, {
         method: 'DELETE',
       });
       const data = await res.json();

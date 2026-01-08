@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createTransaction, getTransactions, updateTransaction, deleteTransaction } from '@/lib/notion';
+import { cache, CACHE_KEYS } from '@/lib/cache';
+import { verifyAuthHeader, unauthorizedResponse } from '@/lib/auth-middleware';
 import type { Transaction, ApiResponse } from '@/types';
 
 // POST: 新增交易記錄
 export async function POST(request: NextRequest): Promise<NextResponse<ApiResponse<{ id: string }>>> {
+  // 驗證認證
+  if (!verifyAuthHeader(request)) {
+    return unauthorizedResponse();
+  }
+
   try {
     const body: Transaction = await request.json();
     
@@ -16,6 +23,11 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
     }
 
     const id = await createTransaction(body);
+    
+    // 清除快取
+    cache.deletePattern(`${CACHE_KEYS.TRANSACTIONS}*`);
+    cache.delete(CACHE_KEYS.ACCOUNTS); // 帳戶餘額可能變動
+    cache.deletePattern('summary*'); // 清除摘要快取
     
     return NextResponse.json({
       success: true,
@@ -32,12 +44,31 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
 
 // GET: 查詢交易記錄
 export async function GET(request: NextRequest): Promise<NextResponse<ApiResponse<Transaction[]>>> {
+  // 驗證認證
+  if (!verifyAuthHeader(request)) {
+    return unauthorizedResponse();
+  }
+
   try {
     const { searchParams } = new URL(request.url);
     const startDate = searchParams.get('startDate') || undefined;
     const endDate = searchParams.get('endDate') || undefined;
 
+    const cacheKey = `${CACHE_KEYS.TRANSACTIONS}:${startDate || 'all'}:${endDate || 'all'}`;
+    
+    // 嘗試從快取取得
+    const cached = cache.get<Transaction[]>(cacheKey);
+    if (cached) {
+      return NextResponse.json({
+        success: true,
+        data: cached,
+      });
+    }
+
     const transactions = await getTransactions(startDate, endDate);
+    
+    // 存入快取
+    cache.set(cacheKey, transactions);
     
     return NextResponse.json({
       success: true,
@@ -54,6 +85,11 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
 
 // PUT: 更新交易記錄
 export async function PUT(request: NextRequest): Promise<NextResponse<ApiResponse<{ success: boolean }>>> {
+  // 驗證認證
+  if (!verifyAuthHeader(request)) {
+    return unauthorizedResponse();
+  }
+
   try {
     const body = await request.json();
     const { id, ...transaction } = body;
@@ -66,6 +102,11 @@ export async function PUT(request: NextRequest): Promise<NextResponse<ApiRespons
     }
 
     await updateTransaction(id, transaction);
+    
+    // 清除快取
+    cache.deletePattern(`${CACHE_KEYS.TRANSACTIONS}*`);
+    cache.delete(CACHE_KEYS.ACCOUNTS);
+    cache.deletePattern('summary*'); // 清除摘要快取
     
     return NextResponse.json({
       success: true,
@@ -82,6 +123,11 @@ export async function PUT(request: NextRequest): Promise<NextResponse<ApiRespons
 
 // DELETE: 刪除交易記錄
 export async function DELETE(request: NextRequest): Promise<NextResponse<ApiResponse<{ success: boolean }>>> {
+  // 驗證認證
+  if (!verifyAuthHeader(request)) {
+    return unauthorizedResponse();
+  }
+
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
@@ -94,6 +140,11 @@ export async function DELETE(request: NextRequest): Promise<NextResponse<ApiResp
     }
 
     await deleteTransaction(id);
+    
+    // 清除快取
+    cache.deletePattern(`${CACHE_KEYS.TRANSACTIONS}*`);
+    cache.delete(CACHE_KEYS.ACCOUNTS);
+    cache.deletePattern('summary*'); // 清除摘要快取
     
     return NextResponse.json({
       success: true,

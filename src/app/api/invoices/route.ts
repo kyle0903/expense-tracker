@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
+import { verifyAuthHeader, unauthorizedResponse } from '@/lib/auth-middleware';
+import type { ApiResponse } from '@/types';
 
 const execAsync = promisify(exec);
 
@@ -26,6 +28,11 @@ interface InvoiceResponse {
 
 // GET: 取得發票列表
 export async function GET(request: NextRequest): Promise<NextResponse<InvoiceResponse>> {
+  // 驗證認證
+  if (!verifyAuthHeader(request)) {
+    return unauthorizedResponse() as NextResponse<InvoiceResponse>;
+  }
+
   try {
     const { searchParams } = new URL(request.url);
     const days = searchParams.get('days') || '120';

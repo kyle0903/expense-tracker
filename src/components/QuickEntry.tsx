@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+import { useAuthFetch } from '@/hooks/useAuthFetch';
 import type { Transaction, Account } from '@/types';
 import { DEFAULT_CATEGORIES, CATEGORY_SUGGESTIONS } from '@/types';
 
@@ -52,11 +53,13 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
   // 轉帳子模式：'transfer' 或 'repayment'
   const [transferSubMode, setTransferSubMode] = useState<'transfer' | 'repayment'>('transfer');
 
+  const authFetch = useAuthFetch();
+
   // 載入帳戶列表
   useEffect(() => {
     async function loadAccounts() {
       try {
-        const res = await fetch('/api/accounts');
+        const res = await authFetch('/api/accounts');
         const data = await res.json();
         if (data.success && data.data) {
           setAccounts(data.data);
@@ -72,7 +75,7 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
       }
     }
     loadAccounts();
-  }, []);
+  }, [authFetch]);
 
   // 取得當前分類列表
   const categories = DEFAULT_CATEGORIES.filter(
@@ -139,7 +142,7 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
 
       setIsSubmitting(true);
       try {
-        const res = await fetch('/api/transfer', {
+        const res = await authFetch('/api/transfer', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -196,7 +199,7 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
           note: finalNote,
         };
 
-        const res = await fetch('/api/transactions', {
+        const res = await authFetch('/api/transactions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(transaction),

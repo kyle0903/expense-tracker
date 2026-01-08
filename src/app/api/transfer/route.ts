@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createTransaction } from '@/lib/notion';
+import { verifyAuthHeader, unauthorizedResponse } from '@/lib/auth-middleware';
 import type { ApiResponse } from '@/types';
 
 interface TransferRequest {
@@ -11,6 +12,11 @@ interface TransferRequest {
 
 // POST: 帳戶間轉帳
 export async function POST(request: NextRequest): Promise<NextResponse<ApiResponse<{ fromId: string; toId: string }>>> {
+  // 驗證認證
+  if (!verifyAuthHeader(request)) {
+    return unauthorizedResponse();
+  }
+
   try {
     const body: TransferRequest = await request.json();
     

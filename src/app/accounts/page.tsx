@@ -1,11 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuthFetch } from '@/hooks/useAuthFetch';
 import type { Account } from '@/types';
 
 export default function AccountsPage() {
   const router = useRouter();
+  const authFetch = useAuthFetch();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -19,13 +21,9 @@ export default function AccountsPage() {
   const accountTypes = ['現金', '銀行帳戶', '信用卡', '儲值卡', '其他'];
 
   // 載入帳戶
-  useEffect(() => {
-    loadAccounts();
-  }, []);
-
-  async function loadAccounts() {
+  const loadAccounts = useCallback(async () => {
     try {
-      const res = await fetch('/api/accounts');
+      const res = await authFetch('/api/accounts');
       const data = await res.json();
       if (data.success) {
         setAccounts(data.data);
@@ -35,7 +33,11 @@ export default function AccountsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [authFetch]);
+
+  useEffect(() => {
+    loadAccounts();
+  }, [loadAccounts]);
 
   // 新增帳戶
   async function handleSubmit(e: React.FormEvent) {
@@ -44,7 +46,7 @@ export default function AccountsPage() {
 
     setIsSubmitting(true);
     try {
-      const res = await fetch('/api/accounts', {
+      const res = await authFetch('/api/accounts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -153,22 +155,11 @@ export default function AccountsPage() {
                     {account.type}
                   </div>
                 </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div 
-                    className="amount"
-                    style={{ fontSize: '1.125rem' }}
-                  >
-                    ${account.balance.toLocaleString()}
-                  </div>
-                  {account.transactionSum !== 0 && (
-                    <div style={{ 
-                      fontSize: '0.75rem', 
-                      color: account.transactionSum > 0 ? 'var(--color-income)' : 'var(--color-expense)',
-                    }}>
-                      {account.transactionSum > 0 ? '+' : ''}
-                      ${account.transactionSum.toLocaleString()}
-                    </div>
-                  )}
+                <div 
+                  className="amount"
+                  style={{ fontSize: '1.125rem' }}
+                >
+                  ${account.balance.toLocaleString()}
                 </div>
               </div>
             </div>
