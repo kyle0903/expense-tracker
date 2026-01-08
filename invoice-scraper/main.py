@@ -141,6 +141,46 @@ async def health_check():
     }
 
 
+@app.get("/ensure-session")
+async def ensure_session():
+    """
+    確保 session 有效，無效則自動登入
+    
+    用於 keep-alive 時順便維持登入狀態，
+    減少後續 API 呼叫時的登入時間
+    """
+    scraper = get_scraper()
+    
+    try:
+        # 先檢查緩存的 session 是否有效
+        if scraper._try_cached_session():
+            return {
+                "status": "cached",
+                "message": "Session 仍然有效",
+                "timestamp": datetime.now().isoformat()
+            }
+        
+        # 需要重新登入
+        start_time = time.time()
+        if scraper.login():
+            elapsed = time.time() - start_time
+            return {
+                "status": "refreshed",
+                "message": f"已重新登入並緩存 session（耗時 {elapsed:.2f} 秒）",
+                "timestamp": datetime.now().isoformat()
+            }
+        else:
+            raise HTTPException(status_code=401, detail="登入失敗")
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Session 檢查失敗: {str(e)}")
+    
+    finally:
+        scraper.close()
+
+
 @app.get("/scrape", response_model=ScrapeResponse)
 async def scrape_invoices():
     """
@@ -152,15 +192,11 @@ async def scrape_invoices():
 
     try:
         # 登入
-        start = time.time()
         if not scraper.login():
             raise HTTPException(status_code=401, detail="登入失敗")
-        print(f"[LOGIN] 登入耗時: {time.time() - start:.2f} 秒")
 
         # 取得發票（固定查詢當月）
-        start = time.time()
         invoices = scraper.get_invoices()
-        print(f"[GET_INVOICES] 取得發票耗時: {time.time() - start:.2f} 秒")
 
         return ScrapeResponse(
             success=True,
@@ -214,15 +250,11 @@ async def scrape_and_save_invoices():
     
     try:
         # 登入
-        start = time.time()
         if not scraper.login():
             raise HTTPException(status_code=401, detail="登入失敗")
-        print(f"[LOGIN] 登入耗時: {time.time() - start:.2f} 秒")
 
         # 取得發票（固定查詢當月）
-        start = time.time()
         invoices = scraper.get_invoices()
-        print(f"[GET_INVOICES] 取得發票耗時: {time.time() - start:.2f} 秒")
 
         for invoice in invoices:
             # 檢查是否已存在（用發票號碼判斷）

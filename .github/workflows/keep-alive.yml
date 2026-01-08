@@ -3,17 +3,22 @@ name: Keep Render Alive
 on:
   schedule:
     # 每 14 分鐘執行一次（小於 30 分鐘休眠時間）
-    - cron: '*/14 * * * *'
+    - cron: "*/14 * * * *"
   workflow_dispatch: # 允許手動觸發測試
 
 jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping health endpoint
+      - name: Ensure session alive
         run: |
-          curl -f https://expense-tracker-w66l.onrender.com/health || exit 1
+          response=$(curl -sf https://expense-tracker-w66l.onrender.com/ensure-session)
+          echo "Response: $response"
+          if [ -z "$response" ]; then
+            echo "Failed to get response"
+            exit 1
+          fi
 
       - name: Log result
         if: success()
-        run: echo "Service is alive!"
+        run: echo "Service is alive and session is valid!"

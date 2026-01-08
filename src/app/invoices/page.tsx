@@ -172,7 +172,7 @@ export default function InvoicesPage() {
               <div className="sync-center-icon">📲</div>
             </div>
             <p className="sync-text">正在從財政部同步發票</p>
-            <p className="sync-hint">第一次同步約需 30 秒，請稍候...</p>
+            <p className="sync-hint">第一次同步約需1分鐘，請稍候...</p>
           </>
         ) : syncResult ? (
           <>
