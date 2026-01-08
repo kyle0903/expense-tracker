@@ -324,9 +324,6 @@ class EInvoiceScraper:
         """
         使用 requests 取得發票列表
 
-        Args:
-            months: 查詢最近幾個月的發票
-
         Returns:
             發票列表
         """

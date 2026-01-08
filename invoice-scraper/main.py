@@ -156,7 +156,7 @@ async def scrape_invoices():
             raise HTTPException(status_code=401, detail="登入失敗")
         
         # 取得發票（固定查詢當月）
-        invoices = scraper.get_invoices(months=1)
+        invoices = scraper.get_invoices()
         
         return ScrapeResponse(
             success=True,
@@ -214,7 +214,7 @@ async def scrape_and_save_invoices():
             raise HTTPException(status_code=401, detail="登入失敗")
         
         # 取得發票（固定查詢當月）
-        invoices = scraper.get_invoices(months=1)
+        invoices = scraper.get_invoices()
         
         for invoice in invoices:
             # 檢查是否已存在（用發票號碼判斷）

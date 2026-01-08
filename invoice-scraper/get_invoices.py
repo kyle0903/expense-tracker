@@ -3,10 +3,7 @@
 輸出 JSON 格式的發票列表
 
 使用方式:
-    python get_invoices.py [months]
-
-參數:
-    months: 查詢最近幾個月的發票 (預設 3)
+    python get_invoices.py
 
 環境變數:
     EINVOICE_PHONE: 手機號碼
@@ -28,9 +25,6 @@ def main():
     log_buffer = io.StringIO()
 
     try:
-        # 預設查詢月數
-        months = int(sys.argv[1]) if len(sys.argv) > 1 else 3
-
         # 檢查環境變數
         phone = os.getenv('EINVOICE_PHONE')
         password = os.getenv('EINVOICE_PASSWORD')
@@ -58,7 +52,7 @@ def main():
                     raise Exception("登入失敗")
 
                 # 取得發票
-                invoices = scraper.get_invoices(months=months)
+                invoices = scraper.get_invoices()
 
             finally:
                 scraper.close()
