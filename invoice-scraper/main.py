@@ -4,7 +4,7 @@
 """
 
 import os
-import json
+import time
 from datetime import datetime
 from typing import Optional, List
 from contextlib import asynccontextmanager
@@ -149,15 +149,19 @@ async def scrape_invoices():
     API 限制只能查詢當月發票
     """
     scraper = get_scraper()
-    
+
     try:
         # 登入
+        start = time.time()
         if not scraper.login():
             raise HTTPException(status_code=401, detail="登入失敗")
-        
+        print(f"[LOGIN] 登入耗時: {time.time() - start:.2f} 秒")
+
         # 取得發票（固定查詢當月）
+        start = time.time()
         invoices = scraper.get_invoices()
-        
+        print(f"[GET_INVOICES] 取得發票耗時: {time.time() - start:.2f} 秒")
+
         return ScrapeResponse(
             success=True,
             message=f"成功取得 {len(invoices)} 筆發票",
@@ -210,12 +214,16 @@ async def scrape_and_save_invoices():
     
     try:
         # 登入
+        start = time.time()
         if not scraper.login():
             raise HTTPException(status_code=401, detail="登入失敗")
-        
+        print(f"[LOGIN] 登入耗時: {time.time() - start:.2f} 秒")
+
         # 取得發票（固定查詢當月）
+        start = time.time()
         invoices = scraper.get_invoices()
-        
+        print(f"[GET_INVOICES] 取得發票耗時: {time.time() - start:.2f} 秒")
+
         for invoice in invoices:
             # 檢查是否已存在（用發票號碼判斷）
             if notion.invoice_exists(invoice.invoice_number):

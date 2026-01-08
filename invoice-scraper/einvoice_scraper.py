@@ -197,25 +197,33 @@ class EInvoiceScraper:
         Returns:
             是否登入成功
         """
-        start_time = time.time()
+        login_start = time.time()
+
+        # 初始化瀏覽器
+        stage_start = time.time()
         self._init_driver()
+        print(f"[LOGIN] 1. 初始化瀏覽器: {time.time() - stage_start:.2f} 秒")
 
         # 前往「手機條碼發票查詢」頁面，會自動導向登入
+        stage_start = time.time()
         self.driver.get(self.MOBILE_CARRIER_URL)
         time.sleep(2)
+        print(f"[LOGIN] 2. 載入登入頁面: {time.time() - stage_start:.2f} 秒")
 
         wait = WebDriverWait(self.driver, 15)
 
         for attempt in range(max_retries):
+            print(f"[LOGIN] 嘗試第 {attempt + 1} 次登入")
             try:
                 # 等待登入表單載入
+                stage_start = time.time()
                 phone_input = wait.until(EC.presence_of_element_located((By.ID, "mobile_phone")))
                 password_input = self.driver.find_element(By.ID, "password")
                 captcha_input = self.driver.find_element(By.ID, "captcha")
                 captcha_img = self.driver.find_element(By.XPATH, "//img[@alt='圖形驗證碼']")
                 refresh_captcha_btn = self.driver.find_element(By.XPATH, "//button[@aria-label='更新圖形驗證碼']")
+                print(f"[LOGIN] 3. 等待表單載入: {time.time() - stage_start:.2f} 秒")
 
-  
                 # 輸入帳密
                 phone_input.clear()
                 phone_input.send_keys(self.phone)
@@ -224,11 +232,13 @@ class EInvoiceScraper:
 
                 time.sleep(1.5)
 
-         
                 # 辨識驗證碼
+                stage_start = time.time()
                 captcha_text = self._recognize_captcha(captcha_img)
+                print(f"[LOGIN] 4. 辨識驗證碼 (OpenAI): {time.time() - stage_start:.2f} 秒")
 
                 if len(captcha_text) != 5:
+                    print(f"[LOGIN] 驗證碼辨識失敗，重新整理")
                     refresh_captcha_btn.click()
                     time.sleep(1.5)
                     continue
@@ -237,12 +247,14 @@ class EInvoiceScraper:
                 captcha_input.send_keys(captcha_text)
 
                 # 點擊登入
+                stage_start = time.time()
                 submit_btn = self.driver.find_element(
                     By.XPATH,
                     "//ul[@class='login_list']//button | //button[contains(text(), '登入')] | //form//button[@type='submit']"
                 )
                 submit_btn.click()
                 time.sleep(3)
+                print(f"[LOGIN] 5. 提交登入: {time.time() - stage_start:.2f} 秒")
 
                 current_url = self.driver.current_url
 
@@ -252,6 +264,7 @@ class EInvoiceScraper:
                         By.XPATH,
                         "//*[contains(text(), '驗證碼錯誤') or contains(text(), '登入失敗') or contains(text(), '密碼錯誤')]"
                     )
+                    print("[LOGIN] 登入失敗，重試中...")
                     try:
                         refresh_btn = self.driver.find_element(By.XPATH, "//button[@aria-label='更新圖形驗證碼']")
                         refresh_btn.click()
@@ -264,25 +277,31 @@ class EInvoiceScraper:
 
                 # 檢查是否登入成功
                 if 'login' not in current_url.lower():
+                    stage_start = time.time()
                     self._save_session()
+                    print(f"[LOGIN] 6. 保存 Session: {time.time() - stage_start:.2f} 秒")
+                    print(f"[LOGIN] 登入成功！總耗時: {time.time() - login_start:.2f} 秒")
                     return True
 
                 try:
                     self.driver.find_element(By.XPATH, "//*[contains(text(), '登出')]")
+                    stage_start = time.time()
                     self._save_session()
+                    print(f"[LOGIN] 6. 保存 Session: {time.time() - stage_start:.2f} 秒")
+                    print(f"[LOGIN] 登入成功！總耗時: {time.time() - login_start:.2f} 秒")
                     return True
                 except:
                     pass
 
             except TimeoutException:
+                print("[LOGIN] 頁面載入超時，重新整理")
                 self.driver.refresh()
                 time.sleep(2)
 
             except Exception:
                 pass
 
-        print("[LOGIN] 登入耗時: {} 秒".format(time.time() - start_time))
-
+        print(f"[LOGIN] 登入失敗，總耗時: {time.time() - login_start:.2f} 秒")
         return False
 
     def _save_session(self):
