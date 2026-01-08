@@ -42,6 +42,14 @@ class EInvoiceScraper:
     BASE_URL = "https://www.einvoice.nat.gov.tw"
     MOBILE_CARRIER_URL = "https://www.einvoice.nat.gov.tw/portal/btc/mobile"  # 手機條碼發票查詢
 
+    # 類別變數：Session 緩存（在同一個服務實例中共享）
+    _session_cache = {
+        'cookies': None,
+        'auth_token': None,
+        'cached_at': None
+    }
+    SESSION_TTL = 1800  # Session 有效期 30 分鐘
+
     def __init__(self, phone: str, password: str, headless: bool = True):
         """
         初始化爬蟲
@@ -58,6 +66,63 @@ class EInvoiceScraper:
         self.cookies = {}           # 登入後的 cookies
         self.auth_token = None      # Authorization token
 
+    def _is_session_valid(self) -> bool:
+        """檢查緩存的 session 是否仍有效"""
+        cache = EInvoiceScraper._session_cache
+        if not cache['cookies'] or not cache['cached_at']:
+            return False
+
+        # 檢查是否過期
+        elapsed = time.time() - cache['cached_at']
+        if elapsed > self.SESSION_TTL:
+            print(f"[SESSION] 緩存已過期 ({elapsed:.0f} 秒)")
+            return False
+
+        return True
+
+    def _try_cached_session(self) -> bool:
+        """嘗試使用緩存的 session"""
+        import requests
+
+        if not self._is_session_valid():
+            return False
+
+        cache = EInvoiceScraper._session_cache
+        print(f"[SESSION] 嘗試使用緩存的 session...")
+
+        # 用一個簡單的 API 測試 session 是否有效
+        test_url = "https://service-mc.einvoice.nat.gov.tw/btc/cloud/api/common/getMemberInfo"
+        headers = {
+            'Accept': 'application/json',
+            'Authorization': f'Bearer {cache["auth_token"]}' if cache['auth_token'] else '',
+            'Origin': 'https://www.einvoice.nat.gov.tw',
+            'Referer': 'https://www.einvoice.nat.gov.tw/',
+        }
+
+        try:
+            response = requests.get(test_url, headers=headers, cookies=cache['cookies'], timeout=5)
+            if response.status_code == 200:
+                # Session 有效，使用緩存
+                self.cookies = cache['cookies']
+                self.auth_token = cache['auth_token']
+                print("[SESSION] 緩存的 session 有效！跳過登入")
+                return True
+            else:
+                print(f"[SESSION] 緩存的 session 已失效 (status: {response.status_code})")
+                return False
+        except Exception as e:
+            print(f"[SESSION] 驗證緩存失敗: {e}")
+            return False
+
+    def _cache_session(self):
+        """緩存當前的 session"""
+        EInvoiceScraper._session_cache = {
+            'cookies': self.cookies.copy(),
+            'auth_token': self.auth_token,
+            'cached_at': time.time()
+        }
+        print("[SESSION] 已緩存 session")
+
     def _init_driver(self):
         """初始化 Chrome/Chromium WebDriver"""
         options = Options()
@@ -65,14 +130,37 @@ class EInvoiceScraper:
         if self.headless:
             options.add_argument('--headless=new')
 
+        # 基本設定
         options.add_argument('--no-sandbox')
         options.add_argument('--disable-dev-shm-usage')
         options.add_argument('--disable-gpu')
-        options.add_argument('--window-size=1920,1080')
+        options.add_argument('--window-size=1280,720')  # 縮小視窗大小
         options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
 
+        # 效能優化：禁用不必要的功能
+        options.add_argument('--disable-extensions')
+        options.add_argument('--disable-infobars')
+        options.add_argument('--disable-notifications')
+        options.add_argument('--disable-popup-blocking')
+        options.add_argument('--blink-settings=imagesEnabled=false')  # 禁用圖片（但保留驗證碼）
+        options.add_argument('--disable-default-apps')
+        options.add_argument('--disable-translate')
+        options.add_argument('--disable-sync')
+        options.add_argument('--disable-background-networking')
+        options.add_argument('--disable-logging')
+        options.add_argument('--log-level=3')  # 只顯示嚴重錯誤
+
+        # 禁用不需要的功能以加速
+        prefs = {
+            'profile.managed_default_content_settings.images': 2,  # 禁用圖片
+            'profile.managed_default_content_settings.stylesheets': 1,  # 保留 CSS
+            'profile.managed_default_content_settings.fonts': 2,  # 禁用字體下載
+            'disk-cache-size': 4096,  # 限制 cache 大小
+        }
+        options.add_experimental_option('prefs', prefs)
+
         # 避免被偵測為自動化工具
-        options.add_experimental_option('excludeSwitches', ['enable-automation'])
+        options.add_experimental_option('excludeSwitches', ['enable-automation', 'enable-logging'])
         options.add_experimental_option('useAutomationExtension', False)
 
         # Docker 環境使用 Chromium
@@ -199,6 +287,13 @@ class EInvoiceScraper:
         """
         login_start = time.time()
 
+        # 先嘗試使用緩存的 session
+        if self._try_cached_session():
+            print(f"[LOGIN] 使用緩存 session，耗時: {time.time() - login_start:.2f} 秒")
+            return True
+
+        print("[LOGIN] 需要重新登入...")
+
         # 初始化瀏覽器
         stage_start = time.time()
         self._init_driver()
@@ -207,10 +302,11 @@ class EInvoiceScraper:
         # 前往「手機條碼發票查詢」頁面，會自動導向登入
         stage_start = time.time()
         self.driver.get(self.MOBILE_CARRIER_URL)
-        time.sleep(2)
+        # 不用 sleep，直接用 WebDriverWait 等待表單載入
         print(f"[LOGIN] 2. 載入登入頁面: {time.time() - stage_start:.2f} 秒")
 
         wait = WebDriverWait(self.driver, 15)
+        short_wait = WebDriverWait(self.driver, 5)
 
         for attempt in range(max_retries):
             print(f"[LOGIN] 嘗試第 {attempt + 1} 次登入")
@@ -220,17 +316,15 @@ class EInvoiceScraper:
                 phone_input = wait.until(EC.presence_of_element_located((By.ID, "mobile_phone")))
                 password_input = self.driver.find_element(By.ID, "password")
                 captcha_input = self.driver.find_element(By.ID, "captcha")
-                captcha_img = self.driver.find_element(By.XPATH, "//img[@alt='圖形驗證碼']")
+                captcha_img = wait.until(EC.presence_of_element_located((By.XPATH, "//img[@alt='圖形驗證碼']")))
                 refresh_captcha_btn = self.driver.find_element(By.XPATH, "//button[@aria-label='更新圖形驗證碼']")
                 print(f"[LOGIN] 3. 等待表單載入: {time.time() - stage_start:.2f} 秒")
 
-                # 輸入帳密
+                # 輸入帳密（不需要額外 sleep）
                 phone_input.clear()
                 phone_input.send_keys(self.phone)
                 password_input.clear()
                 password_input.send_keys(self.password)
-
-                time.sleep(1.5)
 
                 # 辨識驗證碼
                 stage_start = time.time()
@@ -240,7 +334,7 @@ class EInvoiceScraper:
                 if len(captcha_text) != 5:
                     print(f"[LOGIN] 驗證碼辨識失敗，重新整理")
                     refresh_captcha_btn.click()
-                    time.sleep(1.5)
+                    time.sleep(0.8)  # 等待驗證碼圖片更新
                     continue
 
                 captcha_input.clear()
@@ -252,8 +346,15 @@ class EInvoiceScraper:
                     By.XPATH,
                     "//ul[@class='login_list']//button | //button[contains(text(), '登入')] | //form//button[@type='submit']"
                 )
+                current_url_before = self.driver.current_url
                 submit_btn.click()
-                time.sleep(3)
+
+                # 智能等待：URL 變化或出現錯誤訊息
+                try:
+                    short_wait.until(lambda d: d.current_url != current_url_before or
+                                     d.find_elements(By.XPATH, "//*[contains(text(), '驗證碼錯誤') or contains(text(), '登入失敗')]"))
+                except TimeoutException:
+                    pass  # 超時繼續檢查
                 print(f"[LOGIN] 5. 提交登入: {time.time() - stage_start:.2f} 秒")
 
                 current_url = self.driver.current_url
@@ -268,7 +369,7 @@ class EInvoiceScraper:
                     try:
                         refresh_btn = self.driver.find_element(By.XPATH, "//button[@aria-label='更新圖形驗證碼']")
                         refresh_btn.click()
-                        time.sleep(1.5)
+                        time.sleep(0.8)  # 等待驗證碼圖片更新
                     except:
                         pass
                     continue
@@ -279,6 +380,7 @@ class EInvoiceScraper:
                 if 'login' not in current_url.lower():
                     stage_start = time.time()
                     self._save_session()
+                    self._cache_session()  # 緩存 session 供下次使用
                     print(f"[LOGIN] 6. 保存 Session: {time.time() - stage_start:.2f} 秒")
                     print(f"[LOGIN] 登入成功！總耗時: {time.time() - login_start:.2f} 秒")
                     return True
@@ -287,6 +389,7 @@ class EInvoiceScraper:
                     self.driver.find_element(By.XPATH, "//*[contains(text(), '登出')]")
                     stage_start = time.time()
                     self._save_session()
+                    self._cache_session()  # 緩存 session 供下次使用
                     print(f"[LOGIN] 6. 保存 Session: {time.time() - stage_start:.2f} 秒")
                     print(f"[LOGIN] 登入成功！總耗時: {time.time() - login_start:.2f} 秒")
                     return True
