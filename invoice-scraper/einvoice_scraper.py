@@ -142,7 +142,6 @@ class EInvoiceScraper:
         options.add_argument('--disable-infobars')
         options.add_argument('--disable-notifications')
         options.add_argument('--disable-popup-blocking')
-        options.add_argument('--blink-settings=imagesEnabled=false')  # 禁用圖片（但保留驗證碼）
         options.add_argument('--disable-default-apps')
         options.add_argument('--disable-translate')
         options.add_argument('--disable-sync')
@@ -150,10 +149,8 @@ class EInvoiceScraper:
         options.add_argument('--disable-logging')
         options.add_argument('--log-level=3')  # 只顯示嚴重錯誤
 
-        # 禁用不需要的功能以加速
+        # 注意：不能禁用圖片，因為需要載入驗證碼
         prefs = {
-            'profile.managed_default_content_settings.images': 2,  # 禁用圖片
-            'profile.managed_default_content_settings.stylesheets': 1,  # 保留 CSS
             'profile.managed_default_content_settings.fonts': 2,  # 禁用字體下載
             'disk-cache-size': 4096,  # 限制 cache 大小
         }
@@ -346,26 +343,30 @@ class EInvoiceScraper:
                     By.XPATH,
                     "//ul[@class='login_list']//button | //button[contains(text(), '登入')] | //form//button[@type='submit']"
                 )
-                current_url_before = self.driver.current_url
                 submit_btn.click()
 
-                # 智能等待：URL 變化或出現錯誤訊息
+                # 等待頁面回應（保留適當等待時間確保穩定性）
+                time.sleep(2)
+
+                # 等待 URL 變化或錯誤訊息出現
                 try:
-                    short_wait.until(lambda d: d.current_url != current_url_before or
-                                     d.find_elements(By.XPATH, "//*[contains(text(), '驗證碼錯誤') or contains(text(), '登入失敗')]"))
+                    short_wait.until(lambda d:
+                        'login' not in d.current_url.lower() or
+                        d.find_elements(By.XPATH, "//*[contains(text(), '驗證碼錯誤') or contains(text(), '登入失敗')]"))
                 except TimeoutException:
-                    pass  # 超時繼續檢查
+                    pass
                 print(f"[LOGIN] 5. 提交登入: {time.time() - stage_start:.2f} 秒")
 
                 current_url = self.driver.current_url
+                print(f"[LOGIN] 當前 URL: {current_url}")
 
                 # 檢查錯誤訊息
                 try:
-                    self.driver.find_element(
+                    error_element = self.driver.find_element(
                         By.XPATH,
                         "//*[contains(text(), '驗證碼錯誤') or contains(text(), '登入失敗') or contains(text(), '密碼錯誤')]"
                     )
-                    print("[LOGIN] 登入失敗，重試中...")
+                    print(f"[LOGIN] 發現錯誤訊息: {error_element.text}")
                     try:
                         refresh_btn = self.driver.find_element(By.XPATH, "//button[@aria-label='更新圖形驗證碼']")
                         refresh_btn.click()
