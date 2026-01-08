@@ -218,6 +218,7 @@ class EInvoiceScraper:
                 captcha_img = self.driver.find_element(By.XPATH, "//img[@alt='圖形驗證碼']")
                 refresh_captcha_btn = self.driver.find_element(By.XPATH, "//button[@aria-label='更新圖形驗證碼']")
 
+  
                 # 輸入帳密
                 phone_input.clear()
                 phone_input.send_keys(self.phone)
@@ -226,6 +227,7 @@ class EInvoiceScraper:
 
                 time.sleep(1.5)
 
+         
                 # 辨識驗證碼
                 captcha_text = self._recognize_captcha(captcha_img)
 
@@ -318,7 +320,7 @@ class EInvoiceScraper:
         self.driver.quit()
         self.driver = None
 
-    def get_invoices(self, months: int = 3) -> List[Invoice]:
+    def get_invoices() -> List[Invoice]:
         """
         使用 requests 取得發票列表
 
@@ -645,12 +647,18 @@ def main():
 
     try:
         # 登入
+        print("[LOGIN] 登入")
+        start_time = time.time()
         if not scraper.login():
             sys.exit(1)
+        
+        print("[LOGIN] 登入耗時: {} 秒".format(time.time() - start_time))
 
+        start_time = time.time()
         # 取得發票
-        invoices = scraper.get_invoices(months=1)
-
+        print("[GET_INVOICES] 取得發票")
+        invoices = scraper.get_invoices()
+        print("[GET_INVOICES] 取得發票耗時: {} 秒".format(time.time() - start_time))
 
 
         # 轉換為 JSON 格式
@@ -663,9 +671,6 @@ def main():
                 "金額": inv.amount,
                 "明細": inv.details
             })
-        
-        # 輸出 JSON
-        print(json.dumps(result, ensure_ascii=False, indent=2))
 
     except Exception:
         pass
