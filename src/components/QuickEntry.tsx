@@ -18,14 +18,14 @@ function getTaipeiISOString(): string {
   const taipeiOffset = 8 * 60; // 分鐘
   const utcOffset = now.getTimezoneOffset(); // 當前時區偏移（分鐘，反向）
   const taipeiTime = new Date(now.getTime() + (taipeiOffset + utcOffset) * 60 * 1000);
-  
+
   const year = taipeiTime.getFullYear();
   const month = String(taipeiTime.getMonth() + 1).padStart(2, '0');
   const day = String(taipeiTime.getDate()).padStart(2, '0');
   const hours = String(taipeiTime.getHours()).padStart(2, '0');
   const minutes = String(taipeiTime.getMinutes()).padStart(2, '0');
   const seconds = String(taipeiTime.getSeconds()).padStart(2, '0');
-  
+
   return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}+08:00`;
 }
 
@@ -101,17 +101,17 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
   // 格式化金額顯示
   const formattedAmount = amount
     ? parseFloat(amount).toLocaleString('zh-TW', {
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 2,
-      })
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    })
     : '0';
 
   // 計算代墊金額
   const calculateSplitAmount = useCallback(() => {
     if (!amount || !isSplitPayment) return { ownAmount: parseFloat(amount || '0'), splitAmount: 0 };
-    
+
     const totalAmount = parseFloat(amount);
-    
+
     if (useCustomSplit && customSplitAmount) {
       // 使用自訂代墊金額
       const split = parseFloat(customSplitAmount);
@@ -133,7 +133,7 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
   // 送出表單
   const handleSubmit = async () => {
     if (!amount) return;
-    
+
     if (mode === 'transfer') {
       if (!account || !toAccount || account === toAccount) {
         alert('請選擇不同的來源和目標帳戶');
@@ -177,51 +177,102 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
 
       setIsSubmitting(true);
       try {
-        // 計算實際金額（考慮代墊）
-        let actualAmount = parseFloat(amount);
-        let finalNote = note;
-        
+        const totalAmount = parseFloat(amount);
+        const currentDate = getTaipeiISOString();
+
         if (mode === 'expense' && isSplitPayment && amount) {
+          // 代墊模式：創建兩筆交易
           const { ownAmount: myPortion, splitAmount: othersAmount } = calculateSplitAmount();
-          actualAmount = myPortion;
-          const splitInfo = useCustomSplit 
-            ? `[代墊] 總額 $${parseFloat(amount).toLocaleString()}, 代墊 $${othersAmount.toLocaleString()}`
-            : `[代墊] 總額 $${parseFloat(amount).toLocaleString()}, 代墊 $${othersAmount.toLocaleString()} (${splitPeople}人均分)`;
-          finalNote = finalNote ? `${splitInfo} | ${finalNote}` : splitInfo;
-        }
-        
-        const transaction: Transaction = {
-          name: name || category,
-          category,
-          date: getTaipeiISOString(),
-          amount: mode === 'expense' ? -actualAmount : actualAmount,
-          account,
-          note: finalNote,
-        };
 
-        const res = await authFetch('/api/transactions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(transaction),
-        });
+          const splitInfo = useCustomSplit
+            ? `總額 $${totalAmount.toLocaleString()}, 代墊 $${othersAmount.toLocaleString()}`
+            : `總額 $${totalAmount.toLocaleString()}, ${splitPeople}人均分`;
 
-        const data = await res.json();
-        if (data.success) {
-          setShowSuccess(true);
-          setTimeout(() => {
-            setShowSuccess(false);
-            setAmount('');
-            setCategory('');
-            setNote('');
-            setName('');
-            setIsSplitPayment(false);
-            setSplitPeople(2);
-            setUseCustomSplit(false);
-            setCustomSplitAmount('');
-            onSuccess?.();
-          }, 1200);
+          // 交易 1: 個人支出（你的份額，計入支出報表）
+          const personalExpense: Transaction = {
+            name: name || category,
+            category,
+            date: currentDate,
+            amount: -myPortion,
+            account,
+            note: note ? `[個人] ${splitInfo} | ${note}` : `[個人] ${splitInfo}`,
+          };
+
+          // 交易 2: 代墊款（幫別人付的，不計入支出報表）
+          const advancePayment: Transaction = {
+            name: `代墊 - ${name || category}`,
+            category: '代墊',
+            date: currentDate,
+            amount: -othersAmount,
+            account,
+            note: note ? `[代墊] ${splitInfo} | ${note}` : `[代墊] ${splitInfo}`,
+          };
+
+          // 同時創建兩筆交易
+          const [res1, res2] = await Promise.all([
+            authFetch('/api/transactions', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(personalExpense),
+            }),
+            authFetch('/api/transactions', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(advancePayment),
+            }),
+          ]);
+
+          const data1 = await res1.json();
+          const data2 = await res2.json();
+
+          if (data1.success && data2.success) {
+            setShowSuccess(true);
+            setTimeout(() => {
+              setShowSuccess(false);
+              setAmount('');
+              setCategory('');
+              setNote('');
+              setName('');
+              setIsSplitPayment(false);
+              setSplitPeople(2);
+              setUseCustomSplit(false);
+              setCustomSplitAmount('');
+              onSuccess?.();
+            }, 1200);
+          } else {
+            alert('記錄失敗：' + (data1.error || data2.error));
+          }
         } else {
-          alert('記錄失敗：' + data.error);
+          // 一般模式：只創建一筆交易
+          const transaction: Transaction = {
+            name: name || category,
+            category,
+            date: currentDate,
+            amount: mode === 'expense' ? -totalAmount : totalAmount,
+            account,
+            note,
+          };
+
+          const res = await authFetch('/api/transactions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(transaction),
+          });
+
+          const data = await res.json();
+          if (data.success) {
+            setShowSuccess(true);
+            setTimeout(() => {
+              setShowSuccess(false);
+              setAmount('');
+              setCategory('');
+              setNote('');
+              setName('');
+              onSuccess?.();
+            }, 1200);
+          } else {
+            alert('記錄失敗：' + data.error);
+          }
         }
       } catch (error) {
         console.error('Failed to submit:', error);
@@ -235,7 +286,7 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
   const selectedAccount = accounts.find((a) => a.name === account);
   const selectedToAccount = accounts.find((a) => a.name === toAccount);
 
-  const canSubmit = mode === 'transfer' 
+  const canSubmit = mode === 'transfer'
     ? transferSubMode === 'repayment'
       ? amount && account && name
       : amount && account && toAccount && account !== toAccount
@@ -285,7 +336,7 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
       </div>
 
       {/* 金額顯示區塊 - 點擊打開數字鍵盤 */}
-      <div 
+      <div
         className={`amount-card ${mode}`}
         onClick={() => setShowNumpad(true)}
       >
@@ -308,7 +359,7 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
                 className={`transfer-sub-tab ${transferSubMode === 'transfer' ? 'active' : ''}`}
                 onClick={() => { setTransferSubMode('transfer'); setCategory('轉帳'); setName(''); }}
               >
-               💳 帳戶轉帳
+                💳 帳戶轉帳
               </button>
               <button
                 className={`transfer-sub-tab ${transferSubMode === 'repayment' ? 'active' : ''}`}

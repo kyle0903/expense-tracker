@@ -444,8 +444,6 @@ class EInvoiceScraper:
         """
         import requests
 
-        start_time = time.time()
-
         if not self.cookies:
             raise Exception("尚未登入，請先呼叫 login()")
 

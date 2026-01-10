@@ -72,6 +72,7 @@ export const DEFAULT_CATEGORIES: Category[] = [
   { id: "reimbursement", name: "報銷", icon: "🧳", type: "income" },
   { id: "other-income", name: "額外", icon: "💵", type: "income" },
   { id: "transfer", name: "轉帳", icon: "🔄", type: "transfer" },
+  { id: "advance", name: "代墊", icon: "💳", type: "transfer" },
   { id: "repayment", name: "代墊還款", icon: "🤝", type: "transfer" },
 ];
 
