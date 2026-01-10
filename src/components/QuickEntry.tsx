@@ -135,40 +135,80 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
     if (!amount) return;
 
     if (mode === 'transfer') {
-      if (!account || !toAccount || account === toAccount) {
-        alert('請選擇不同的來源和目標帳戶');
-        return;
-      }
-
       setIsSubmitting(true);
       try {
-        const res = await authFetch('/api/transfer', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            fromAccount: account,
-            toAccount: toAccount,
-            amount: parseFloat(amount),
-            date: getTaipeiISOString(),
-          }),
-        });
+        if (transferSubMode === 'repayment') {
+          // 代墊還款模式：創建一筆收入交易（朋友還錢給你）
+          if (!account || !name) {
+            alert('請選擇帳戶並填寫還款人');
+            setIsSubmitting(false);
+            return;
+          }
 
-        const data = await res.json();
-        if (data.success) {
-          setShowSuccess(true);
-          setTimeout(() => {
-            setShowSuccess(false);
-            setAmount('');
-            setNote('');
-            setName('');
-            onSuccess?.();
-          }, 1200);
+          const transaction: Transaction = {
+            name: name,
+            category: '代墊還款',
+            date: getTaipeiISOString(),
+            amount: parseFloat(amount), // 正數，代表收入
+            account,
+            note: note || '',
+          };
+
+          const res = await authFetch('/api/transactions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(transaction),
+          });
+
+          const data = await res.json();
+          if (data.success) {
+            setShowSuccess(true);
+            setTimeout(() => {
+              setShowSuccess(false);
+              setAmount('');
+              setNote('');
+              setName('');
+              onSuccess?.();
+            }, 1200);
+          } else {
+            alert('記錄失敗：' + data.error);
+          }
         } else {
-          alert('轉帳失敗：' + data.error);
+          // 帳戶轉帳模式
+          if (!account || !toAccount || account === toAccount) {
+            alert('請選擇不同的來源和目標帳戶');
+            setIsSubmitting(false);
+            return;
+          }
+
+          const res = await authFetch('/api/transfer', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              fromAccount: account,
+              toAccount: toAccount,
+              amount: parseFloat(amount),
+              date: getTaipeiISOString(),
+            }),
+          });
+
+          const data = await res.json();
+          if (data.success) {
+            setShowSuccess(true);
+            setTimeout(() => {
+              setShowSuccess(false);
+              setAmount('');
+              setNote('');
+              setName('');
+              onSuccess?.();
+            }, 1200);
+          } else {
+            alert('轉帳失敗：' + data.error);
+          }
         }
       } catch (error) {
         console.error('Failed to submit:', error);
-        alert('轉帳失敗，請稍後再試');
+        alert('操作失敗，請稍後再試');
       } finally {
         setIsSubmitting(false);
       }
