@@ -15,14 +15,15 @@ export function useAuthFetch() {
     options: RequestInit = {}
   ): Promise<Response> => {
     const headers = new Headers(options.headers);
-    
+
     if (token) {
       headers.set('Authorization', `Bearer ${token}`);
     }
-    
+
     return fetch(url, {
       ...options,
       headers,
+      cache: 'no-store', // 禁用瀏覽器和 Next.js fetch 快取
     });
   }, [token]);
 

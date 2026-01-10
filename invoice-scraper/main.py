@@ -262,10 +262,20 @@ async def scrape_and_save_invoices():
                 skipped_count += 1
                 continue
             
+            # 從發票日期提取時間 (HH:MM)
+            transaction_time = None
+            if invoice.invoice_date and 'T' in invoice.invoice_date:
+                try:
+                    time_part = invoice.invoice_date.split('T')[1][:5]  # 取 HH:MM
+                    transaction_time = time_part
+                except:
+                    pass
+            
             # 使用 OpenAI 分類
             classification = classify_invoice(
                 seller_name=invoice.seller_name,
-                details=invoice.details or ""
+                details=invoice.details or "",
+                transaction_time=transaction_time
             )
             
             # 準備備註
@@ -296,6 +306,21 @@ async def scrape_and_save_invoices():
                 帳戶="Unicard",
                 備註=note
             ))
+        
+        # 如果有儲存新發票，通知 Next.js 清除快取
+        if saved_count > 0:
+            try:
+                import requests
+                nextjs_url = os.getenv("NEXTJS_API_URL", "http://localhost:3000")
+                pin_code = os.getenv("PIN_CODE", "")
+                requests.post(
+                    f"{nextjs_url}/api/cache/invalidate",
+                    json={"target": "all"},
+                    headers={"Authorization": f"Bearer {pin_code}"},
+                    timeout=5
+                )
+            except Exception:
+                pass  # 快取清除失敗不影響主要功能
         
         return SaveResponse(
             success=True,
