@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAccounts, createAccount, updateAccount } from '@/lib/notion';
-import { cache, CACHE_KEYS } from '@/lib/cache';
 import { verifyAuthHeader, unauthorizedResponse } from '@/lib/auth-middleware';
 import type { Account, ApiResponse } from '@/types';
 
@@ -12,20 +11,8 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
   }
 
   try {
-    // 嘗試從快取取得
-    const cached = cache.get<Account[]>(CACHE_KEYS.ACCOUNTS);
-    if (cached) {
-      return NextResponse.json({
-        success: true,
-        data: cached,
-      });
-    }
-
     const accounts = await getAccounts();
-    
-    // 存入快取
-    cache.set(CACHE_KEYS.ACCOUNTS, accounts);
-    
+
     return NextResponse.json({
       success: true,
       data: accounts,
@@ -49,7 +36,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
 
   try {
     const body = await request.json();
-    
+
     if (!body.name || !body.type) {
       return NextResponse.json({
         success: false,
@@ -62,10 +49,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       type: body.type,
       initialBalance: body.initialBalance || 0,
     });
-    
-    // 清除快取
-    cache.delete(CACHE_KEYS.ACCOUNTS);
-    
+
     return NextResponse.json({
       success: true,
       data: { id },
@@ -98,9 +82,6 @@ export async function PUT(request: NextRequest): Promise<NextResponse<ApiRespons
     }
 
     await updateAccount(id, updates);
-    
-    // 清除快取
-    cache.delete(CACHE_KEYS.ACCOUNTS);
 
     return NextResponse.json({
       success: true,
