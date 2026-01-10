@@ -25,6 +25,7 @@ export default function AccountDetailPage() {
   // 編輯初始金額
   const [isEditingBalance, setIsEditingBalance] = useState(false);
   const [editBalance, setEditBalance] = useState('');
+  const [isSavingBalance, setIsSavingBalance] = useState(false);
 
   // 過濾選中月份的交易
   const filteredTransactions = transactions.filter((tx) => {
@@ -54,24 +55,24 @@ export default function AccountDetailPage() {
   // 載入資料
   const loadData = useCallback(async () => {
     if (!accountId) return;
-    
+
     setLoading(true);
     try {
       // 先載入所有帳戶來取得帳戶資訊和名稱
       const accRes = await authFetch('/api/accounts');
       const accData = await accRes.json();
-      
+
       if (accData.success) {
         setAccounts(accData.data);
         const currentAccount = accData.data.find((a: Account) => a.id === accountId);
-        
+
         if (currentAccount) {
           setAccount(currentAccount);
-          
+
           // 取得該帳戶的交易記錄
           const txRes = await authFetch('/api/transactions');
           const txData = await txRes.json();
-          
+
           if (txData.success) {
             // 過濾該帳戶的交易
             const filtered = txData.data.filter(
@@ -146,6 +147,7 @@ export default function AccountDetailPage() {
       return;
     }
 
+    setIsSavingBalance(true);
     try {
       const res = await authFetch('/api/accounts', {
         method: 'PUT',
@@ -165,13 +167,15 @@ export default function AccountDetailPage() {
     } catch (error) {
       console.error('Failed to update:', error);
       alert('更新失敗');
+    } finally {
+      setIsSavingBalance(false);
     }
   };
 
   if (loading) {
     return (
-      <div style={{ 
-        textAlign: 'center', 
+      <div style={{
+        textAlign: 'center',
         padding: '60px 0',
         color: 'var(--text-tertiary)',
       }}>
@@ -182,8 +186,8 @@ export default function AccountDetailPage() {
 
   if (!account) {
     return (
-      <div style={{ 
-        textAlign: 'center', 
+      <div style={{
+        textAlign: 'center',
         padding: '60px 0',
         color: 'var(--text-tertiary)',
       }}>
@@ -198,7 +202,7 @@ export default function AccountDetailPage() {
       <button
         onClick={() => router.push('/accounts')}
         className="btn btn-secondary"
-        style={{ 
+        style={{
           marginBottom: '16px',
           padding: '8px 12px',
           fontSize: '0.875rem',
@@ -208,22 +212,22 @@ export default function AccountDetailPage() {
       </button>
 
       {/* 帳戶資訊 */}
-      <div 
+      <div
         className="card"
         style={{ marginBottom: '20px', background: 'var(--bg-secondary)' }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
-            <h1 style={{ 
-              fontSize: '1.5rem', 
+            <h1 style={{
+              fontSize: '1.5rem',
               fontWeight: 600,
               color: 'var(--text-primary)',
               margin: 0,
             }}>
               {account.name}
             </h1>
-            <p style={{ 
-              fontSize: '0.875rem', 
+            <p style={{
+              fontSize: '0.875rem',
               color: 'var(--text-secondary)',
               marginTop: '4px',
             }}>
@@ -231,14 +235,14 @@ export default function AccountDetailPage() {
             </p>
           </div>
           <div style={{ textAlign: 'right' }}>
-            <div 
+            <div
               className="amount"
               style={{ fontSize: '1.5rem' }}
             >
               ${account.balance.toLocaleString()}
             </div>
-            <div style={{ 
-              fontSize: '0.75rem', 
+            <div style={{
+              fontSize: '0.75rem',
               color: 'var(--text-secondary)',
               marginTop: '2px',
             }}>
@@ -246,7 +250,7 @@ export default function AccountDetailPage() {
             </div>
           </div>
         </div>
-        
+
         {/* 初始金額 */}
         <div style={{
           display: 'flex',
@@ -264,6 +268,7 @@ export default function AccountDetailPage() {
                 type="number"
                 value={editBalance}
                 onChange={(e) => setEditBalance(e.target.value)}
+                disabled={isSavingBalance}
                 style={{
                   width: '100px',
                   padding: '4px 8px',
@@ -272,15 +277,17 @@ export default function AccountDetailPage() {
                   borderRadius: '4px',
                   background: 'var(--bg-primary)',
                   color: 'var(--text-primary)',
+                  opacity: isSavingBalance ? 0.6 : 1,
                 }}
                 autoFocus
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') saveInitialBalance();
-                  if (e.key === 'Escape') setIsEditingBalance(false);
+                  if (e.key === 'Enter' && !isSavingBalance) saveInitialBalance();
+                  if (e.key === 'Escape' && !isSavingBalance) setIsEditingBalance(false);
                 }}
               />
               <button
                 onClick={saveInitialBalance}
+                disabled={isSavingBalance}
                 style={{
                   padding: '4px 8px',
                   fontSize: '0.75rem',
@@ -288,13 +295,15 @@ export default function AccountDetailPage() {
                   color: 'var(--bg-primary)',
                   border: 'none',
                   borderRadius: '4px',
-                  cursor: 'pointer',
+                  cursor: isSavingBalance ? 'not-allowed' : 'pointer',
+                  opacity: isSavingBalance ? 0.6 : 1,
                 }}
               >
-                儲存
+                {isSavingBalance ? '儲存中...' : '儲存'}
               </button>
               <button
                 onClick={() => setIsEditingBalance(false)}
+                disabled={isSavingBalance}
                 style={{
                   padding: '4px 8px',
                   fontSize: '0.75rem',
@@ -302,7 +311,8 @@ export default function AccountDetailPage() {
                   color: 'var(--text-secondary)',
                   border: 'none',
                   borderRadius: '4px',
-                  cursor: 'pointer',
+                  cursor: isSavingBalance ? 'not-allowed' : 'pointer',
+                  opacity: isSavingBalance ? 0.6 : 1,
                 }}
               >
                 取消
@@ -332,14 +342,14 @@ export default function AccountDetailPage() {
 
       {/* 交易記錄 */}
       <div>
-        <div style={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
           alignItems: 'center',
           marginBottom: '12px',
         }}>
-          <h2 style={{ 
-            fontSize: '0.875rem', 
+          <h2 style={{
+            fontSize: '0.875rem',
             fontWeight: 600,
             margin: 0,
           }}>
@@ -369,7 +379,7 @@ export default function AccountDetailPage() {
                 </option>
               ))}
             </select>
-            <span style={{ 
+            <span style={{
               fontSize: '0.8125rem',
               color: monthlyTransactionSum >= 0 ? 'var(--color-income)' : 'var(--color-expense)',
               fontWeight: 600,

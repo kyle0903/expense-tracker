@@ -12,16 +12,17 @@ interface TransactionListProps {
   showActions?: boolean;
 }
 
-export function TransactionList({ 
-  transactions, 
+export function TransactionList({
+  transactions,
   accounts = [],
-  onUpdate, 
+  onUpdate,
   onDelete,
   showActions = true,
 }: TransactionListProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Transaction>>({});
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [savingId, setSavingId] = useState<string | null>(null);
 
   const expenseCategories = DEFAULT_CATEGORIES.filter(c => c.type === 'expense');
   const incomeCategories = DEFAULT_CATEGORIES.filter(c => c.type === 'income');
@@ -29,24 +30,24 @@ export function TransactionList({
   // 格式化日期時間顯示 (將 ISO 格式轉換為易讀的 MM/DD HH:mm)
   const formatDateTime = (dateStr: string): string => {
     if (!dateStr) return '';
-    
+
     try {
       // 嘗試解析為 Date 物件
       const date = new Date(dateStr);
       if (isNaN(date.getTime())) {
         return dateStr; // 無法解析，直接返回原字串
       }
-      
+
       const month = String(date.getMonth() + 1).padStart(2, '0');
       const day = String(date.getDate()).padStart(2, '0');
       const hours = String(date.getHours()).padStart(2, '0');
       const minutes = String(date.getMinutes()).padStart(2, '0');
-      
+
       // 如果時間是 00:00，只顯示日期
       if (hours === '00' && minutes === '00') {
         return `${month}/${day}`;
       }
-      
+
       return `${month}/${day} ${hours}:${minutes}`;
     } catch {
       return dateStr;
@@ -56,7 +57,7 @@ export function TransactionList({
   // 將日期轉換為 datetime-local input 可用的格式 (YYYY-MM-DDTHH:MM)
   const toDateTimeLocalValue = (dateStr: string): string => {
     if (!dateStr) return '';
-    
+
     try {
       const date = new Date(dateStr);
       if (isNaN(date.getTime())) {
@@ -66,13 +67,13 @@ export function TransactionList({
         }
         return '';
       }
-      
+
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, '0');
       const day = String(date.getDate()).padStart(2, '0');
       const hours = String(date.getHours()).padStart(2, '0');
       const minutes = String(date.getMinutes()).padStart(2, '0');
-      
+
       return `${year}-${month}-${day}T${hours}:${minutes}`;
     } catch {
       return '';
@@ -100,17 +101,22 @@ export function TransactionList({
 
   const handleSave = async () => {
     if (!editingId || !onUpdate) return;
-    
-    // 將 datetime-local 格式轉換為 ISO 格式再儲存
-    const dateToSave = editForm.date ? fromDateTimeLocalValue(editForm.date) : '';
-    
-    await onUpdate({
-      id: editingId,
-      ...editForm as Transaction,
-      date: dateToSave,
-    });
-    setEditingId(null);
-    setEditForm({});
+
+    setSavingId(editingId);
+    try {
+      // 將 datetime-local 格式轉換為 ISO 格式再儲存
+      const dateToSave = editForm.date ? fromDateTimeLocalValue(editForm.date) : '';
+
+      await onUpdate({
+        id: editingId,
+        ...editForm as Transaction,
+        date: dateToSave,
+      });
+      setEditingId(null);
+      setEditForm({});
+    } finally {
+      setSavingId(null);
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -127,8 +133,8 @@ export function TransactionList({
 
   if (transactions.length === 0) {
     return (
-      <div style={{ 
-        textAlign: 'center', 
+      <div style={{
+        textAlign: 'center',
         padding: '40px 20px',
         color: 'var(--text-tertiary)',
       }}>
@@ -142,6 +148,7 @@ export function TransactionList({
       {transactions.map((tx, index) => {
         const isEditing = editingId === tx.id;
         const isDeleting = deletingId === tx.id;
+        const isSaving = savingId === tx.id;
         const isExpense = (editForm.amount ?? tx.amount) < 0;
         const categories = isExpense ? expenseCategories : incomeCategories;
 
@@ -218,6 +225,7 @@ export function TransactionList({
                     onClick={handleCancel}
                     className="btn btn-secondary"
                     style={{ flex: 1 }}
+                    disabled={isSaving}
                   >
                     取消
                   </button>
@@ -225,8 +233,9 @@ export function TransactionList({
                     onClick={handleSave}
                     className="btn btn-primary"
                     style={{ flex: 1 }}
+                    disabled={isSaving}
                   >
-                    儲存
+                    {isSaving ? '儲存中...' : '儲存'}
                   </button>
                 </div>
               </div>
@@ -242,15 +251,15 @@ export function TransactionList({
               >
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 500 }}>{tx.name}</div>
-                  <div style={{ 
-                    fontSize: '0.75rem', 
+                  <div style={{
+                    fontSize: '0.75rem',
                     color: 'var(--text-secondary)',
                     marginTop: '2px',
                   }}>
                     {tx.category} · {tx.account} · {formatDateTime(tx.date)}
                   </div>
                 </div>
-                <div 
+                <div
                   className={`amount ${tx.amount >= 0 ? 'amount-income' : 'amount-expense'}`}
                   style={{ marginRight: showActions ? '12px' : 0 }}
                 >
@@ -261,8 +270,8 @@ export function TransactionList({
                     <button
                       onClick={() => handleEdit(tx)}
                       className="btn btn-secondary"
-                      style={{ 
-                        padding: '6px 10px', 
+                      style={{
+                        padding: '6px 10px',
                         fontSize: '0.75rem',
                         minWidth: 'auto',
                       }}
@@ -273,8 +282,8 @@ export function TransactionList({
                       onClick={() => tx.id && handleDelete(tx.id)}
                       disabled={isDeleting}
                       className="btn btn-secondary"
-                      style={{ 
-                        padding: '6px 10px', 
+                      style={{
+                        padding: '6px 10px',
                         fontSize: '0.75rem',
                         minWidth: 'auto',
                         color: 'var(--color-expense)',

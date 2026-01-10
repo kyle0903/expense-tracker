@@ -25,13 +25,14 @@ CATEGORY_SUGGESTIONS = {
 CATEGORIES = list(CATEGORY_SUGGESTIONS.keys())
 
 
-def classify_invoice(seller_name: str, details: str) -> dict:
+def classify_invoice(seller_name: str, details: str, transaction_time: str = None) -> dict:
     """
     使用 OpenAI 分類發票
     
     Args:
         seller_name: 商店名稱
         details: 消費明細
+        transaction_time: 交易時間 (HH:MM 格式，例如 "12:30")
     
     Returns:
         {
@@ -47,10 +48,15 @@ def classify_invoice(seller_name: str, details: str) -> dict:
         for cat, names in CATEGORY_SUGGESTIONS.items()
     ])
     
+    # 時間相關提示
+    time_context = ""
+    if transaction_time:
+        time_context = f"\n交易時間: {transaction_time}"
+    
     prompt = f"""根據以下發票資訊，判斷消費的「名稱」和「分類」。
 
 商店: {seller_name}
-明細: {details}
+明細: {details}{time_context}
 
 分類及建議名稱:
 {category_hints}
@@ -63,6 +69,15 @@ def classify_invoice(seller_name: str, details: str) -> dict:
 - 分類必須是上述分類之一
 - 便利商店購買食物/飲料歸類為「餐飲」，名稱可為「飲料」或「早餐」等
 - 便利商店購買日用品歸類為「購物」
+
+餐飲名稱判斷規則 (依優先順序):
+1. 若明細「只有飲料」(無任何食物)，名稱必須是「飲料」，不管什麼時間
+2. 若有食物，根據交易時間判斷:
+   - 05:00-10:59 → 早餐
+   - 11:00-13:59 → 午餐
+   - 14:00-17:59 → 下午茶
+   - 18:00-21:59 → 晚餐
+   - 22:00-04:59 → 宵夜
 
 只回覆 JSON，不要有其他文字。"""
 
@@ -103,9 +118,40 @@ def classify_invoice(seller_name: str, details: str) -> dict:
 
 
 if __name__ == "__main__":
-    # 測試
+    # 測試 1: 午餐時段買食物 + 飲料 → 午餐
     result = classify_invoice(
-        seller_name="統一超商股份有限公司台北市第九三七分公司",
-        details="拿鐵熱咖啡(大) x1 $55"
+        seller_name="全家便利商店股份有限公司",
+        details="一日蔬果100%蜜桃綜合蔬果汁 x2 $76\n21Plus蒜香鹽酥雞 x1 $59\n握便當-黑胡椒烤雞 x1 $59\n金馬飲料2件79折4件75折0107*1XZ x1 $-16",
+        transaction_time="12:19"
     )
-    print(result)
+    print("12:19 買食物+飲料:", result)
+    
+    # 測試 2: 下午買飯糰 → 下午茶
+    result = classify_invoice(
+        seller_name="統一超商股份有限公司",
+        details="海苔飯糰 x1 $35",
+        transaction_time="14:30"
+    )
+    print("14:30 買飯糰:", result)
+    
+    # 測試 3: 任何時段只買飲料 → 飲料
+    result = classify_invoice(
+        seller_name="統一超商股份有限公司",
+        details="拿鐵熱咖啡(大) x1 $55",
+        transaction_time="08:00"
+    )
+    print("08:00 只買咖啡:", result)
+
+    result = classify_invoice(
+        seller_name="統一超商股份有限公司",
+        details="日式炒飯 x1 $55",
+        transaction_time="13:00"
+    )
+    print("13:00 買食物:", result)
+
+    result = classify_invoice(
+        seller_name="三元國際有限公司",
+        details="運動服 x1 $155",
+        transaction_time="13:00"
+    )
+    print("13:00 買衣服:", result)
