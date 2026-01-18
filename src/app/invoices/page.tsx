@@ -55,37 +55,36 @@ export default function InvoicesPage() {
   const [notionInvoices, setNotionInvoices] = useState<NotionInvoice[]>([]);
   const [loadingInvoices, setLoadingInvoices] = useState(true);
 
+  // 是否正在忙碌中（同步中或載入中）
+  const isBusy = syncing || loadingInvoices;
+
   // 取得 Notion 中的發票清單
-  const fetchNotionInvoices = useCallback(async (signal?: AbortSignal) => {
+  const fetchNotionInvoices = useCallback(async () => {
     setLoadingInvoices(true);
     try {
-      const res = await fetch(`${SCRAPER_API_URL}/notion-invoices`, { signal });
+      const res = await fetch(`${SCRAPER_API_URL}/notion-invoices`);
       const data = await res.json();
-      console.log('Notion invoices response:', data);
       if (data.success) {
         setNotionInvoices(data.invoices);
-      } else {
-        console.error('API error:', data);
       }
-    } catch (err) {
-      // 忽略因頁面切換導致的請求取消
-      if (err instanceof Error && err.name === 'AbortError') {
-        console.log('Fetch invoices aborted (page hidden)');
-        return;
-      }
-      console.error('Fetch notion invoices error:', err);
+    } catch {
+      // 靜默處理錯誤
     } finally {
       setLoadingInvoices(false);
     }
   }, []);
 
   // 呼叫爬蟲 API 同步發票到 Notion
-  const syncInvoicesToNotion = useCallback(async (signal?: AbortSignal) => {
+  const syncInvoicesToNotion = useCallback(async () => {
+    // 如果已經在同步中，不重複觸發
+    if (syncing) return;
+
     setSyncing(true);
     setSyncResult(null);
+    setLoadingInvoices(true); // 同步期間也顯示載入狀態
 
     try {
-      const res = await fetch(`${SCRAPER_API_URL}/scrape-and-save`, { signal });
+      const res = await fetch(`${SCRAPER_API_URL}/scrape-and-save`);
       const data = await res.json();
 
       setSyncResult({
@@ -95,54 +94,38 @@ export default function InvoicesPage() {
         skipped_count: data.skipped_count || 0,
         saved_invoices: data.saved_invoices || [],
       });
-
-      // 同步完成後重新取得 Notion 發票清單
-      fetchNotionInvoices();
-    } catch (err) {
-      // 忽略因頁面切換導致的請求取消，不顯示錯誤
-      if (err instanceof Error && err.name === 'AbortError') {
-        console.log('Sync aborted (page hidden)');
-        setSyncing(false);
-        return;
-      }
+    } catch {
       setSyncResult({
         success: false,
         message: '同步失敗，請確認爬蟲服務是否運行中',
         saved_count: 0,
         skipped_count: 0,
       });
-      console.error('Sync error:', err);
     } finally {
       setSyncing(false);
-      // 無論同步結果如何，都取得現有的發票清單
-      fetchNotionInvoices();
+      // 同步完成後（無論成功或失敗）取得發票清單
+      await fetchNotionInvoices();
     }
-  }, [fetchNotionInvoices]);
+  }, [syncing, fetchNotionInvoices]);
 
-  // 進入頁面時：1. 先載入現有發票 2. 嘗試同步新發票
+  // 進入頁面時自動同步
   useEffect(() => {
-    const controller = new AbortController();
+    syncInvoicesToNotion();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-    // 立即取得現有發票（不等同步完成）
-    fetchNotionInvoices(controller.signal);
-    // 同時開始同步
-    syncInvoicesToNotion(controller.signal);
-
-    return () => controller.abort();
-  }, [fetchNotionInvoices, syncInvoicesToNotion]);
-
-  // 當頁面重新可見時，重新取得發票清單
+  // 當頁面重新可見時，自動重新同步
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        console.log('Page became visible, refreshing invoices...');
-        fetchNotionInvoices();
+        // 頁面重新可見時，重新同步
+        syncInvoicesToNotion();
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [fetchNotionInvoices]);
+  }, [syncInvoicesToNotion]);
 
   // 格式化金額
   const formatAmount = (amount: number) => {
@@ -180,7 +163,7 @@ export default function InvoicesPage() {
         <button
           onClick={() => syncInvoicesToNotion()}
           className="btn-sync"
-          disabled={syncing}
+          disabled={isBusy}
         >
           <svg className="sync-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
@@ -188,7 +171,7 @@ export default function InvoicesPage() {
             <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
             <path d="M16 16h5v5" />
           </svg>
-          {syncing ? '同步中' : '重新同步'}
+          {syncing ? '同步中' : loadingInvoices ? '載入中' : '重新同步'}
         </button>
       </header>
 
