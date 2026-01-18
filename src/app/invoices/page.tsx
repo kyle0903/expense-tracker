@@ -56,10 +56,10 @@ export default function InvoicesPage() {
   const [loadingInvoices, setLoadingInvoices] = useState(true);
 
   // 取得 Notion 中的發票清單
-  const fetchNotionInvoices = useCallback(async () => {
+  const fetchNotionInvoices = useCallback(async (signal?: AbortSignal) => {
     setLoadingInvoices(true);
     try {
-      const res = await fetch(`${SCRAPER_API_URL}/notion-invoices`);
+      const res = await fetch(`${SCRAPER_API_URL}/notion-invoices`, { signal });
       const data = await res.json();
       console.log('Notion invoices response:', data);
       if (data.success) {
@@ -68,24 +68,24 @@ export default function InvoicesPage() {
         console.error('API error:', data);
       }
     } catch (err) {
+      // 忽略因頁面切換導致的請求取消
+      if (err instanceof Error && err.name === 'AbortError') {
+        console.log('Fetch invoices aborted (page hidden)');
+        return;
+      }
       console.error('Fetch notion invoices error:', err);
     } finally {
       setLoadingInvoices(false);
     }
   }, []);
 
-  // 進入頁面時自動同步發票到 Notion
-  useEffect(() => {
-    syncInvoicesToNotion();
-  }, []);
-
   // 呼叫爬蟲 API 同步發票到 Notion
-  const syncInvoicesToNotion = async () => {
+  const syncInvoicesToNotion = useCallback(async (signal?: AbortSignal) => {
     setSyncing(true);
     setSyncResult(null);
 
     try {
-      const res = await fetch(`${SCRAPER_API_URL}/scrape-and-save`);
+      const res = await fetch(`${SCRAPER_API_URL}/scrape-and-save`, { signal });
       const data = await res.json();
 
       setSyncResult({
@@ -99,6 +99,12 @@ export default function InvoicesPage() {
       // 同步完成後重新取得 Notion 發票清單
       fetchNotionInvoices();
     } catch (err) {
+      // 忽略因頁面切換導致的請求取消，不顯示錯誤
+      if (err instanceof Error && err.name === 'AbortError') {
+        console.log('Sync aborted (page hidden)');
+        setSyncing(false);
+        return;
+      }
       setSyncResult({
         success: false,
         message: '同步失敗，請確認爬蟲服務是否運行中',
@@ -106,12 +112,37 @@ export default function InvoicesPage() {
         skipped_count: 0,
       });
       console.error('Sync error:', err);
-      // 即使同步失敗，也嘗試取得現有的發票清單
-      fetchNotionInvoices();
     } finally {
       setSyncing(false);
+      // 無論同步結果如何，都取得現有的發票清單
+      fetchNotionInvoices();
     }
-  };
+  }, [fetchNotionInvoices]);
+
+  // 進入頁面時：1. 先載入現有發票 2. 嘗試同步新發票
+  useEffect(() => {
+    const controller = new AbortController();
+
+    // 立即取得現有發票（不等同步完成）
+    fetchNotionInvoices(controller.signal);
+    // 同時開始同步
+    syncInvoicesToNotion(controller.signal);
+
+    return () => controller.abort();
+  }, [fetchNotionInvoices, syncInvoicesToNotion]);
+
+  // 當頁面重新可見時，重新取得發票清單
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('Page became visible, refreshing invoices...');
+        fetchNotionInvoices();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [fetchNotionInvoices]);
 
   // 格式化金額
   const formatAmount = (amount: number) => {
@@ -147,7 +178,7 @@ export default function InvoicesPage() {
           <span className="month-badge">{getCurrentMonth()}</span>
         </div>
         <button
-          onClick={syncInvoicesToNotion}
+          onClick={() => syncInvoicesToNotion()}
           className="btn-sync"
           disabled={syncing}
         >
@@ -172,7 +203,7 @@ export default function InvoicesPage() {
               <div className="sync-center-icon">📲</div>
             </div>
             <p className="sync-text">正在從財政部同步發票</p>
-            <p className="sync-hint">第一次同步約需1分鐘，請稍候...</p>
+            <p className="sync-hint">請稍候...</p>
           </>
         ) : syncResult ? (
           <>
