@@ -5,7 +5,8 @@
 
 from datetime import datetime
 from typing import Optional, List
-from contextlib import asynccontextmanager
+from time import time
+import os
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -89,19 +90,10 @@ class NotionInvoicesListResponse(BaseModel):
 
 # ============ FastAPI App ============
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """應用程式生命週期管理"""
-    print("🚀 電子發票爬蟲 API 啟動")
-    yield
-    print("👋 電子發票爬蟲 API 關閉")
-
-
 app = FastAPI(
     title="電子發票爬蟲 API",
     description="從財政部電子發票平台爬取發票並儲存到 Notion",
-    version="1.0.0",
-    lifespan=lifespan
+    version="1.0.0"
 )
 
 # CORS 設定
