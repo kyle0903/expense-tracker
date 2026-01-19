@@ -129,7 +129,7 @@ export async function getAccounts(): Promise<Account[]> {
 /**
  * 新增帳戶
  */
-export async function createAccount(account: Omit<Account, 'id' | 'transactionSum' | 'balance'>): Promise<string> {
+export async function createAccount(account: Omit<Account, 'id' | 'transactionSum' | 'balance' | 'isCarrierAccount'>): Promise<string> {
   const response = await notion.pages.create({
     parent: { database_id: ACCOUNTS_DB_ID },
     properties: {
