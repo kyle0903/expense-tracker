@@ -5,7 +5,7 @@
 
 from datetime import datetime
 from typing import Optional, List
-from time import time
+import time
 import os
 
 from fastapi import FastAPI, HTTPException
