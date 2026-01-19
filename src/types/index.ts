@@ -27,6 +27,7 @@ export interface Account {
   initialBalance: number; // 初始金額
   transactionSum: number; // 交易加總
   balance: number; // 餘額
+  isCarrierAccount: boolean; // 是否為載具帳戶
 }
 
 // 交易記錄

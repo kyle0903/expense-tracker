@@ -259,18 +259,22 @@ async def get_notion_invoices(year: int = None, month: int = None):
 async def scrape_and_save_invoices():
     """
     執行爬蟲取得當月發票並儲存到 Notion
-    
+
     - 自動使用 OpenAI 分類
-    - 帳戶預設為「Unicard」
+    - 帳戶使用 Notion 中標記為載具帳戶的帳戶
     """
     scraper = get_scraper()
     notion = NotionService()
-    
+
+    # 取得載具帳戶
+    carrier_account = notion.get_carrier_account()
+    logger.info(f"使用載具帳戶: {carrier_account}")
+
     saved_count = 0
     skipped_count = 0
     scraped_count = 0
     saved_invoices = []
-    
+
     try:
         # 登入
         logger.info("開始登入財政部電子發票平台...")
@@ -314,12 +318,12 @@ async def scrape_and_save_invoices():
                 category=classification["category"],
                 date=invoice.invoice_date,
                 amount=-abs(invoice.amount),  # 支出為負數
-                account="Unicard",
+                account=carrier_account,
                 note=note,
                 invoice_number=invoice.invoice_number,
                 seller_name=invoice.seller_name
             )
-            
+
             saved_count += 1
             # 加入完整分類資訊到回應
             saved_invoices.append(SavedInvoiceResponse(
@@ -330,7 +334,7 @@ async def scrape_and_save_invoices():
                 明細=invoice.details,
                 名稱=classification["name"],
                 分類=classification["category"],
-                帳戶="Unicard",
+                帳戶=carrier_account,
                 備註=note
             ))
         
@@ -399,7 +403,11 @@ async def scrape_and_save_stream():
     async def generate():
         scraper = get_scraper()
         notion = NotionService()
-        
+
+        # 取得載具帳戶
+        carrier_account = notion.get_carrier_account()
+        logger.info(f"使用載具帳戶: {carrier_account}")
+
         saved_count = 0
         skipped_count = 0
         scraped_count = 0
@@ -541,12 +549,12 @@ async def scrape_and_save_stream():
                     category=classification["category"],
                     date=invoice.invoice_date,
                     amount=-abs(invoice.amount),
-                    account="Unicard",
+                    account=carrier_account,
                     note=note,
                     invoice_number=invoice.invoice_number,
                     seller_name=invoice.seller_name
                 )
-                
+
                 saved_count += 1
                 saved_invoices.append({
                     '日期': invoice.invoice_date,
@@ -556,7 +564,7 @@ async def scrape_and_save_stream():
                     '明細': invoice.details,
                     '名稱': classification["name"],
                     '分類': classification["category"],
-                    '帳戶': "Unicard",
+                    '帳戶': carrier_account,
                     '備註': note
                 })
                 

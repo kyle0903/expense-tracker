@@ -121,6 +121,7 @@ export async function getAccounts(): Promise<Account[]> {
       initialBalance: props['初始金額']?.number || 0,
       transactionSum: props['交易加總']?.rollup?.number || 0,
       balance: props['餘額']?.formula?.number || 0,
+      isCarrierAccount: props['載具帳戶']?.checkbox || false,
     };
   });
 }
@@ -353,8 +354,43 @@ export async function getAccountById(id: string): Promise<Account | null> {
       initialBalance: props['初始金額']?.number || 0,
       transactionSum: props['交易加總']?.rollup?.number || 0,
       balance: props['餘額']?.formula?.number || 0,
+      isCarrierAccount: props['載具帳戶']?.checkbox || false,
     };
   } catch {
     return null;
   }
+}
+
+/**
+ * 取得載具帳戶（被標記為載具帳戶的帳戶，若有多個只取第一個）
+ */
+export async function getCarrierAccount(): Promise<Account | null> {
+  const accounts = await getAccounts();
+  return accounts.find(a => a.isCarrierAccount) || null;
+}
+
+/**
+ * 設定載具帳戶（確保只有一個帳戶被標記）
+ */
+export async function setCarrierAccount(accountId: string): Promise<void> {
+  const accounts = await getAccounts();
+
+  // 取消所有已勾選的載具帳戶
+  const carrierAccounts = accounts.filter(a => a.isCarrierAccount);
+  for (const account of carrierAccounts) {
+    await notion.pages.update({
+      page_id: account.id,
+      properties: {
+        '載具帳戶': { checkbox: false },
+      },
+    });
+  }
+
+  // 勾選新的載具帳戶
+  await notion.pages.update({
+    page_id: accountId,
+    properties: {
+      '載具帳戶': { checkbox: true },
+    },
+  });
 }

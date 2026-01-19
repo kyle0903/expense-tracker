@@ -67,10 +67,10 @@ class NotionService:
         """根據帳戶名稱取得帳戶頁面 ID"""
         if account_name in self._account_cache:
             return self._account_cache[account_name]
-        
+
         if not self.accounts_db_id:
             raise ValueError("缺少 NOTION_ACCOUNTS_DB_ID 環境變數")
-        
+
         results = self._query_database(
             self.accounts_db_id,
             {
@@ -78,13 +78,36 @@ class NotionService:
                 "title": {"equals": account_name}
             }
         )
-        
+
         if results:
             account_id = results[0]["id"]
             self._account_cache[account_name] = account_id
             return account_id
         else:
             raise ValueError(f"找不到帳戶: {account_name}")
+
+    def get_carrier_account(self) -> str:
+        """取得被標記為載具帳戶的帳戶名稱，若無則回傳 Unicard"""
+        if not self.accounts_db_id:
+            return "Unicard"
+
+        try:
+            results = self._query_database(
+                self.accounts_db_id,
+                {
+                    "property": "載具帳戶",
+                    "checkbox": {"equals": True}
+                }
+            )
+
+            if results:
+                props = results[0].get("properties", {})
+                if props.get("帳戶名稱", {}).get("title"):
+                    return props["帳戶名稱"]["title"][0].get("text", {}).get("content", "Unicard")
+
+            return "Unicard"
+        except Exception:
+            return "Unicard"
     
     def invoice_exists(self, invoice_number: str) -> bool:
         """檢查發票是否已存在"""

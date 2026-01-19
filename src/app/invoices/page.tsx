@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import InvoiceAccountSelector from '@/components/InvoiceAccountSelector';
 
 // Notion 發票記錄類型
 interface NotionInvoice {
@@ -218,6 +219,9 @@ export default function InvoicesPage() {
           {syncing ? '同步中' : loadingInvoices ? '載入中' : '重新同步'}
         </button>
       </header>
+
+      {/* 載具帳戶選擇器 */}
+      <InvoiceAccountSelector disabled={syncing} />
 
       {/* 同步狀態卡片 */}
       <div className={`sync-card ${syncing ? 'syncing' : syncResult?.success ? 'success' : syncResult ? 'error' : ''}`}>
