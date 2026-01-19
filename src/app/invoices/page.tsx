@@ -520,7 +520,7 @@ export default function InvoicesPage() {
 
         .progress-fill {
           height: 100%;
-          background: linear-gradient(90deg, var(--color-accent) 0%, #7eb5d6 100%);
+          background: linear-gradient(90deg, var(--color-accent) 0%, #25df5dfa 100%);
           border-radius: 3px;
           transition: width 0.3s ease;
         }
