@@ -3,18 +3,25 @@
 提供 API 介面取得電子發票並儲存到 Notion
 """
 
-import os
-import time
 from datetime import datetime
 from typing import Optional, List
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
 load_dotenv()
+
+import logging
+
+# 設定 logging
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 # 載入爬蟲和 Notion 服務
 from einvoice_scraper import EInvoiceScraper, Invoice
@@ -57,7 +64,9 @@ class SaveResponse(BaseModel):
     message: str
     saved_count: int
     skipped_count: int
+    scraped_count: int = 0  # 爬取到的發票數量
     saved_invoices: List[SavedInvoiceResponse]
+    error_detail: Optional[str] = None  # 錯誤詳細資訊
 
 
 class NotionInvoiceResponse(BaseModel):
@@ -138,6 +147,22 @@ async def health_check():
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
         "version": "1.0.0"
+    }
+
+
+@app.post("/clear-session")
+async def clear_session():
+    """
+    清除 session 快取，強制下次重新登入
+    
+    當報告「儲存0筆跳過0筆重複」時，可以先呼叫此 API 清除快取
+    """
+    EInvoiceScraper.clear_session_cache()
+    logger.info("已清除 session 快取")
+    return {
+        "success": True,
+        "message": "Session 快取已清除，下次將重新登入",
+        "timestamp": datetime.now().isoformat()
     }
 
 
@@ -246,15 +271,20 @@ async def scrape_and_save_invoices():
     
     saved_count = 0
     skipped_count = 0
+    scraped_count = 0
     saved_invoices = []
     
     try:
         # 登入
+        logger.info("開始登入財政部電子發票平台...")
         if not scraper.login():
-            raise HTTPException(status_code=401, detail="登入失敗")
+            raise HTTPException(status_code=401, detail="登入失敗，請檢查帳號密碼")
 
         # 取得發票（固定查詢當月）
+        logger.info("正在取得當月發票列表...")
         invoices = scraper.get_invoices()
+        scraped_count = len(invoices)
+        logger.info(f"成功取得 {scraped_count} 筆發票")
 
         for invoice in invoices:
             # 檢查是否已存在（用發票號碼判斷）
@@ -309,14 +339,36 @@ async def scrape_and_save_invoices():
         
         return SaveResponse(
             success=True,
-            message=f"儲存 {saved_count} 筆，跳過 {skipped_count} 筆重複",
+            message=f"儲存 {saved_count} 筆，跳過 {skipped_count} 筆重複（共爬取 {scraped_count} 筆）",
             saved_count=saved_count,
             skipped_count=skipped_count,
+            scraped_count=scraped_count,
             saved_invoices=saved_invoices
         )
         
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        error_msg = str(e)
+        logger.error(f"爬取發票時發生錯誤: {error_msg}")
+        
+        # 如果有部分成功，仍然返回結果
+        if scraped_count > 0 or saved_count > 0:
+            return SaveResponse(
+                success=False,
+                message=f"部分失敗：儲存 {saved_count} 筆，跳過 {skipped_count} 筆（共爬取 {scraped_count} 筆）",
+                saved_count=saved_count,
+                skipped_count=skipped_count,
+                scraped_count=scraped_count,
+                saved_invoices=saved_invoices,
+                error_detail=error_msg
+            )
+        
+        # 完全失敗
+        raise HTTPException(
+            status_code=500, 
+            detail=f"取得發票失敗: {error_msg}。請嘗試呼叫 /clear-session 後重試。"
+        )
     
     finally:
         scraper.close()

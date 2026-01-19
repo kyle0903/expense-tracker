@@ -7,6 +7,7 @@ import os
 import re
 import time
 import base64
+import logging
 from datetime import datetime
 from dataclasses import dataclass
 from typing import Optional, List
@@ -18,12 +19,18 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
-from PIL import Image
 from openai import OpenAI
 from dotenv import load_dotenv
 
 # 載入環境變數 (包含 OPENAI_API_KEY)
 load_dotenv()
+
+# 設定 logging
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 
 @dataclass
@@ -126,7 +133,8 @@ class EInvoiceScraper:
                 return True
             else:
                 return False
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Session 驗證失敗: {e}")
             return False
 
     def _cache_session(self):
@@ -136,6 +144,17 @@ class EInvoiceScraper:
             'auth_token': self.auth_token,
             'cached_at': time.time()
         }
+        logger.info("Session 已緩存")
+
+    @classmethod
+    def clear_session_cache(cls):
+        """清除 session 快取，強制下次重新登入"""
+        cls._session_cache = {
+            'cookies': None,
+            'auth_token': None,
+            'cached_at': None
+        }
+        logger.info("Session 快取已清除")
 
     def _init_driver(self):
         """初始化 Chrome/Chromium WebDriver"""
@@ -183,7 +202,6 @@ class EInvoiceScraper:
             options.binary_location = chrome_bin
         
         # 建立 WebDriver
-        from selenium.webdriver.chrome.service import Service
         chromedriver_path = os.environ.get('CHROMEDRIVER_PATH')
         if chromedriver_path:
             service = Service(executable_path=chromedriver_path)
@@ -299,11 +317,14 @@ class EInvoiceScraper:
         Returns:
             是否登入成功
         """
-        login_start = time.time()
+        logger.info("開始登入流程...")
 
         # 先嘗試使用緩存的 session
         if self._try_cached_session():
+            logger.info("使用緩存的 session 成功")
             return True
+        
+        logger.info("緩存無效，需要重新登入")
 
         # 初始化瀏覽器
         self._init_driver()
@@ -317,7 +338,6 @@ class EInvoiceScraper:
         for attempt in range(max_retries):
             try:
                 # 等待登入表單載入
-                stage_start = time.time()
                 phone_input = wait.until(EC.presence_of_element_located((By.ID, "mobile_phone")))
                 password_input = self.driver.find_element(By.ID, "password")
                 captcha_input = self.driver.find_element(By.ID, "captcha")
@@ -363,7 +383,7 @@ class EInvoiceScraper:
 
                 # 檢查錯誤訊息
                 try:
-                    error_element = self.driver.find_element(
+                    self.driver.find_element(
                         By.XPATH,
                         "//*[contains(text(), '驗證碼錯誤') or contains(text(), '登入失敗') or contains(text(), '密碼錯誤')]"
                     )
@@ -416,7 +436,7 @@ class EInvoiceScraper:
             )
 
             token_keys = ['token', 'authToken', 'jwt', 'accessToken', 'jwtToken', 'auth_token', 'access_token']
-            for storage_name, storage in [('localStorage', local_storage), ('sessionStorage', session_storage)]:
+            for _, storage in [('localStorage', local_storage), ('sessionStorage', session_storage)]:
                 for key in token_keys:
                     if key in storage:
                         self.auth_token = storage[key]
@@ -485,10 +505,15 @@ class EInvoiceScraper:
 
         try:
             # 步驟1: 取得查詢用的 JWT token
+            logger.info(f"查詢發票列表，日期範圍: {start_date.strftime('%Y-%m-%d')} ~ {end_date.strftime('%Y-%m-%d')}")
             response = requests.post(api_url, headers=headers, cookies=self.cookies, json=payload, timeout=30)
 
             if response.status_code != 200:
-                return invoices
+                error_msg = f"取得 JWT token 失敗: HTTP {response.status_code}"
+                logger.error(error_msg)
+                # 清除快取，下次強制重新登入
+                self.clear_session_cache()
+                raise Exception(error_msg)
 
             jwt_token = response.text.strip()
 
@@ -507,10 +532,15 @@ class EInvoiceScraper:
             search_response = requests.post(search_url, headers=search_headers, cookies=self.cookies, json=search_payload, timeout=30)
 
             if search_response.status_code != 200:
-                return invoices
+                error_msg = f"查詢發票列表失敗: HTTP {search_response.status_code}"
+                logger.error(error_msg)
+                # 清除快取，下次強制重新登入
+                self.clear_session_cache()
+                raise Exception(error_msg)
 
             data = search_response.json()
             invoice_list = data.get('content', [])
+            logger.info(f"API 返回 {len(invoice_list)} 筆發票")
 
             if isinstance(invoice_list, list) and len(invoice_list) > 0:
                 for item in invoice_list:
@@ -562,10 +592,12 @@ class EInvoiceScraper:
                     )
                     invoices.append(invoice)
 
-        except Exception:
-            pass
+            logger.info(f"成功處理 {len(invoices)} 筆發票")
 
-
+        except Exception as e:
+            logger.error(f"取得發票列表時發生錯誤: {e}")
+            # 重新拋出異常，讓上層處理
+            raise
 
         return invoices
     
@@ -655,85 +687,6 @@ class EInvoiceScraper:
             pass
         
         return None
-
-    def _get_invoice_detail(self, token: str) -> Optional[Invoice]:
-        """
-        透過 API 取得發票詳細資訊
-
-        Args:
-            token: 發票的 JWT token
-
-        Returns:
-            Invoice 物件
-        """
-        import requests
-
-        api_url = "https://service-mc.einvoice.nat.gov.tw/btc/cloud/api/common/getCarrierInvoiceDetail"
-
-        # Token 放在 Authorization header
-        headers = {
-            'Accept': 'application/json, text/plain, */*',
-            'Authorization': f'Bearer {token}',
-            'Origin': 'https://www.einvoice.nat.gov.tw',
-            'Referer': 'https://www.einvoice.nat.gov.tw/',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-
-        try:
-            # POST 不需要 payload
-            response = requests.post(
-                api_url,
-                headers=headers,
-                cookies=self.cookies,
-                timeout=10
-            )
-
-            if response.status_code == 200:
-                data = response.json()
-
-                # 解析 API 回應
-                if data.get('code') == '200' or data.get('success'):
-                    detail = data.get('data', data)
-
-                    # 取得發票資訊
-                    invoice_number = detail.get('invNum', detail.get('invoiceNumber', ''))
-                    invoice_date_raw = detail.get('invDate', detail.get('invoiceDate', ''))
-                    seller_name = detail.get('sellerName', detail.get('shopName', '未知商店'))
-                    amount = int(detail.get('amount', detail.get('totalAmount', 0)))
-
-                    # 取得消費明細
-                    details_list = detail.get('details', detail.get('items', []))
-                    details_str = None
-                    if details_list:
-                        details_str = '; '.join([
-                            f"{item.get('description', item.get('name', ''))}: ${item.get('amount', item.get('price', ''))}"
-                            for item in details_list
-                        ])
-
-                    # 轉換日期格式
-                    if invoice_date_raw:
-                        # 可能是 timestamp 或日期字串
-                        if isinstance(invoice_date_raw, (int, float)) or invoice_date_raw.isdigit():
-                            ts = int(invoice_date_raw) / 1000 if int(invoice_date_raw) > 9999999999 else int(invoice_date_raw)
-                            invoice_date = datetime.fromtimestamp(ts).strftime('%Y-%m-%d')
-                        else:
-                            # 嘗試解析日期字串
-                            invoice_date = invoice_date_raw[:10]
-                    else:
-                        invoice_date = datetime.now().strftime('%Y-%m-%d')
-
-                    return Invoice(
-                        invoice_number=invoice_number,
-                        invoice_date=invoice_date,
-                        seller_name=seller_name,
-                        amount=amount,
-                        details=details_str
-                    )
-        except Exception:
-            pass
-
-        return None
-
 
     def close(self):
         """關閉瀏覽器"""
