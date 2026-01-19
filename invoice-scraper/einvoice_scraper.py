@@ -567,7 +567,8 @@ class EInvoiceScraper:
 
                             total_amount = invoice_data.get('totalAmount', '')
                             if total_amount:
-                                amount = int(total_amount)
+                                # 移除千位分隔符逗號後再轉換
+                                amount = int(str(total_amount).replace(',', ''))
 
                             seller_name = invoice_data.get('sellerName', '')
                             details = self._get_invoice_details(invoice_token)
@@ -581,7 +582,9 @@ class EInvoiceScraper:
                         seller_name = item.get('sellerName', '未知商店')
 
                     if amount is None:
-                        amount = int(item.get('totalAmount', 0))
+                        # 移除千位分隔符逗號後再轉換
+                        raw_amount = str(item.get('totalAmount', 0)).replace(',', '')
+                        amount = int(raw_amount) if raw_amount else 0
 
                     invoice = Invoice(
                         invoice_number=invoice_number,
