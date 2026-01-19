@@ -512,17 +512,19 @@ export default function InvoicesPage() {
 
         .progress-bar {
           width: 100%;
-          height: 6px;
-          background: var(--bg-tertiary);
-          border-radius: 3px;
+          height: 8px;
+          background: rgba(0, 0, 0, 0.1);
+          border-radius: 4px;
           overflow: hidden;
+          box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
         }
 
         .progress-fill {
           height: 100%;
-          background: linear-gradient(90deg, var(--color-accent) 0%, #25df5dfa 100%);
-          border-radius: 3px;
+          background: linear-gradient(90deg, #4CAF50 0%, #8BC34A 50%, #CDDC39 100%);
+          border-radius: 4px;
           transition: width 0.3s ease;
+          box-shadow: 0 0 8px rgba(76, 175, 80, 0.5);
         }
 
         .progress-text {
