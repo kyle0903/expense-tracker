@@ -34,6 +34,14 @@ interface SavedInvoice {
   備註: string;
 }
 
+// 進度狀態類型
+interface ProgressState {
+  current: number;
+  total: number;
+  stage: string;
+  message: string;
+}
+
 // 爬蟲 API URL (Docker 容器)
 const SCRAPER_API_URL = process.env.NEXT_PUBLIC_SCRAPER_API_URL || 'http://localhost:8000';
 
@@ -54,6 +62,7 @@ export default function InvoicesPage() {
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
   const [notionInvoices, setNotionInvoices] = useState<NotionInvoice[]>([]);
   const [loadingInvoices, setLoadingInvoices] = useState(true);
+  const [progress, setProgress] = useState<ProgressState | null>(null);
 
   // 是否正在忙碌中（同步中或載入中）
   const isBusy = syncing || loadingInvoices;
@@ -74,19 +83,26 @@ export default function InvoicesPage() {
     }
   }, []);
 
-  // 呼叫爬蟲 API 同步發票到 Notion
+  // 呼叫爬蟲 API 同步發票到 Notion（使用 SSE 串流）
   const syncInvoicesToNotion = useCallback(async () => {
     // 如果已經在同步中，不重複觸發
     if (syncing) return;
 
     setSyncing(true);
     setSyncResult(null);
-    setLoadingInvoices(true); // 同步期間也顯示載入狀態
+    setProgress(null);
+    setLoadingInvoices(true);
 
-    try {
-      const res = await fetch(`${SCRAPER_API_URL}/scrape-and-save`);
-      const data = await res.json();
+    // 使用 EventSource 接收 SSE 串流
+    const eventSource = new EventSource(`${SCRAPER_API_URL}/scrape-and-save-stream`);
 
+    eventSource.addEventListener('progress', (e) => {
+      const data = JSON.parse(e.data);
+      setProgress(data);
+    });
+
+    eventSource.addEventListener('result', (e) => {
+      const data = JSON.parse(e.data);
       setSyncResult({
         success: data.success,
         message: data.message,
@@ -94,18 +110,46 @@ export default function InvoicesPage() {
         skipped_count: data.skipped_count || 0,
         saved_invoices: data.saved_invoices || [],
       });
-    } catch {
-      setSyncResult({
-        success: false,
-        message: '同步失敗，請確認爬蟲服務是否運行中',
-        saved_count: 0,
-        skipped_count: 0,
-      });
-    } finally {
+      setProgress(null);
       setSyncing(false);
-      // 同步完成後（無論成功或失敗）取得發票清單
-      await fetchNotionInvoices();
-    }
+      eventSource.close();
+      // 同步完成後取得發票清單
+      fetchNotionInvoices();
+    });
+
+    eventSource.addEventListener('error', (e) => {
+      // 嘗試解析錯誤資料
+      try {
+        const event = e as MessageEvent;
+        if (event.data) {
+          const data = JSON.parse(event.data);
+          setSyncResult({
+            success: false,
+            message: data.message || '同步失敗',
+            saved_count: data.saved_count || 0,
+            skipped_count: data.skipped_count || 0,
+          });
+        } else {
+          setSyncResult({
+            success: false,
+            message: '同步失敗，請確認爬蟲服務是否運行中',
+            saved_count: 0,
+            skipped_count: 0,
+          });
+        }
+      } catch {
+        setSyncResult({
+          success: false,
+          message: '同步失敗，請確認爬蟲服務是否運行中',
+          saved_count: 0,
+          skipped_count: 0,
+        });
+      }
+      setProgress(null);
+      setSyncing(false);
+      eventSource.close();
+      fetchNotionInvoices();
+    });
   }, [syncing, fetchNotionInvoices]);
 
   // 進入頁面時自動同步
@@ -185,8 +229,25 @@ export default function InvoicesPage() {
               <div className="pulse-ring delay-2"></div>
               <div className="sync-center-icon">📲</div>
             </div>
-            <p className="sync-text">正在從財政部同步發票</p>
-            <p className="sync-hint">請稍候...</p>
+            <p className="sync-text">
+              {progress?.message || '正在從財政部同步發票'}
+            </p>
+            {progress && progress.total > 0 && (
+              <div className="progress-container">
+                <div className="progress-bar">
+                  <div 
+                    className="progress-fill" 
+                    style={{ width: `${Math.round((progress.current / progress.total) * 100)}%` }}
+                  />
+                </div>
+                <span className="progress-text">
+                  {progress.current} / {progress.total}
+                </span>
+              </div>
+            )}
+            {(!progress || progress.total === 0) && (
+              <p className="sync-hint">請稍候...</p>
+            )}
           </>
         ) : syncResult ? (
           <>
@@ -434,6 +495,40 @@ export default function InvoicesPage() {
           font-size: 0.8rem;
           color: var(--text-secondary);
           margin: 0;
+        }
+
+        /* 進度條 */
+        .progress-container {
+          margin-top: 16px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 8px;
+          width: 100%;
+          max-width: 280px;
+          margin-left: auto;
+          margin-right: auto;
+        }
+
+        .progress-bar {
+          width: 100%;
+          height: 6px;
+          background: var(--bg-tertiary);
+          border-radius: 3px;
+          overflow: hidden;
+        }
+
+        .progress-fill {
+          height: 100%;
+          background: linear-gradient(90deg, var(--color-accent) 0%, #7eb5d6 100%);
+          border-radius: 3px;
+          transition: width 0.3s ease;
+        }
+
+        .progress-text {
+          font-size: 0.75rem;
+          color: var(--text-secondary);
+          font-variant-numeric: tabular-nums;
         }
 
         /* 結果顯示 */

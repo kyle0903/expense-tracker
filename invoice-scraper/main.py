@@ -7,8 +7,13 @@ from datetime import datetime
 from typing import Optional, List
 import time
 import os
+import json
+import asyncio
+import queue
+import threading
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -364,6 +369,236 @@ async def scrape_and_save_invoices():
     
     finally:
         scraper.close()
+
+
+@app.get("/scrape-and-save-stream")
+async def scrape_and_save_stream():
+    """
+    執行爬蟲取得當月發票並儲存到 Notion（SSE 串流版本）
+    
+    使用 Server-Sent Events 即時回傳進度：
+    - event: progress - 進度更新
+    - event: result - 最終結果
+    - event: error - 錯誤訊息
+    
+    前端使用方式：
+    ```javascript
+    const eventSource = new EventSource('/scrape-and-save-stream');
+    eventSource.addEventListener('progress', (e) => {
+        const data = JSON.parse(e.data);
+        console.log(data.message, data.current, data.total);
+    });
+    eventSource.addEventListener('result', (e) => {
+        const data = JSON.parse(e.data);
+        console.log('完成:', data);
+        eventSource.close();
+    });
+    ```
+    """
+    
+    async def generate():
+        scraper = get_scraper()
+        notion = NotionService()
+        
+        saved_count = 0
+        skipped_count = 0
+        scraped_count = 0
+        saved_invoices = []
+        progress_queue = queue.Queue()
+        
+        def send_event(event_type: str, data: dict):
+            """格式化 SSE 事件"""
+            return f"event: {event_type}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+        
+        def progress_callback(current, total, stage, message):
+            """進度回調 - 放入 queue 供 async generator 使用"""
+            progress_queue.put({
+                'current': current,
+                'total': total,
+                'stage': stage,
+                'message': message
+            })
+        
+        try:
+            # 發送開始事件
+            yield send_event('progress', {
+                'current': 0,
+                'total': 0,
+                'stage': 'login',
+                'message': '正在登入財政部電子發票平台...'
+            })
+            
+            # 登入（在背景執行緒中執行）
+            login_success = False
+            login_error = None
+            
+            def do_login():
+                nonlocal login_success, login_error
+                try:
+                    login_success = scraper.login()
+                except Exception as e:
+                    login_error = str(e)
+            
+            login_thread = threading.Thread(target=do_login)
+            login_thread.start()
+            
+            while login_thread.is_alive():
+                await asyncio.sleep(0.5)
+            
+            if login_error:
+                yield send_event('error', {'message': f'登入失敗: {login_error}'})
+                return
+            
+            if not login_success:
+                yield send_event('error', {'message': '登入失敗，請檢查帳號密碼'})
+                return
+            
+            yield send_event('progress', {
+                'current': 0,
+                'total': 0,
+                'stage': 'fetching',
+                'message': '登入成功，正在取得發票列表...'
+            })
+            
+            # 取得發票（在背景執行緒中執行）
+            invoices = []
+            fetch_error = None
+            
+            def do_fetch():
+                nonlocal invoices, fetch_error
+                try:
+                    invoices = scraper.get_invoices(progress_callback=progress_callback)  # noqa: F841
+                except Exception as e:
+                    fetch_error = str(e)
+                    logger.error(f"取得發票失敗: {fetch_error}")
+            
+            fetch_thread = threading.Thread(target=do_fetch)
+            fetch_thread.start()
+            
+            # 持續發送進度更新
+            while fetch_thread.is_alive() or not progress_queue.empty():
+                try:
+                    progress = progress_queue.get_nowait()
+                    yield send_event('progress', progress)
+                except queue.Empty:
+                    await asyncio.sleep(0.1)
+            
+            if fetch_error:
+                yield send_event('error', {'message': f'取得發票失敗: {fetch_error}'})
+                return
+            
+            scraped_count = len(invoices)
+            
+            yield send_event('progress', {
+                'current': 0,
+                'total': scraped_count,
+                'stage': 'saving',
+                'message': f'取得 {scraped_count} 筆發票，開始儲存到 Notion...'
+            })
+            
+            # 儲存到 Notion
+            for idx, invoice in enumerate(invoices, 1):
+                # 檢查是否已存在
+                if notion.invoice_exists(invoice.invoice_number):
+                    skipped_count += 1
+                    yield send_event('progress', {
+                        'current': idx,
+                        'total': scraped_count,
+                        'stage': 'saving',
+                        'message': f'跳過重複發票 {idx}/{scraped_count}: {invoice.invoice_number}'
+                    })
+                    continue
+                
+                # 從發票日期提取時間
+                transaction_time = None
+                if invoice.invoice_date and 'T' in invoice.invoice_date:
+                    try:
+                        time_part = invoice.invoice_date.split('T')[1][:5]
+                        transaction_time = time_part
+                    except:
+                        pass
+                
+                yield send_event('progress', {
+                    'current': idx,
+                    'total': scraped_count,
+                    'stage': 'classifying',
+                    'message': f'分類發票 {idx}/{scraped_count}: {invoice.seller_name}'
+                })
+                
+                # 使用 OpenAI 分類
+                classification = classify_invoice(
+                    seller_name=invoice.seller_name,
+                    details=invoice.details or "",
+                    transaction_time=transaction_time
+                )
+                
+                # 準備備註
+                note = invoice.details or f"{invoice.invoice_number} - {invoice.seller_name}"
+                
+                # 儲存到 Notion
+                notion.create_transaction(
+                    name=classification["name"],
+                    category=classification["category"],
+                    date=invoice.invoice_date,
+                    amount=-abs(invoice.amount),
+                    account="Unicard",
+                    note=note,
+                    invoice_number=invoice.invoice_number,
+                    seller_name=invoice.seller_name
+                )
+                
+                saved_count += 1
+                saved_invoices.append({
+                    '日期': invoice.invoice_date,
+                    '發票號碼': invoice.invoice_number,
+                    '店家': invoice.seller_name,
+                    '金額': -abs(invoice.amount),
+                    '明細': invoice.details,
+                    '名稱': classification["name"],
+                    '分類': classification["category"],
+                    '帳戶': "Unicard",
+                    '備註': note
+                })
+                
+                yield send_event('progress', {
+                    'current': idx,
+                    'total': scraped_count,
+                    'stage': 'saving',
+                    'message': f'已儲存 {idx}/{scraped_count}: {classification["name"]}'
+                })
+            
+            # 發送最終結果
+            yield send_event('result', {
+                'success': True,
+                'message': f'儲存 {saved_count} 筆，跳過 {skipped_count} 筆重複（共爬取 {scraped_count} 筆）',
+                'saved_count': saved_count,
+                'skipped_count': skipped_count,
+                'scraped_count': scraped_count,
+                'saved_invoices': saved_invoices
+            })
+            
+        except Exception as e:
+            error_msg = str(e)
+            logger.error(f"爬取發票時發生錯誤: {error_msg}")
+            yield send_event('error', {
+                'message': error_msg,
+                'saved_count': saved_count,
+                'skipped_count': skipped_count,
+                'scraped_count': scraped_count
+            })
+        
+        finally:
+            scraper.close()
+    
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"  # 禁用 nginx 緩衝
+        }
+    )
 
 
 # ============ 直接執行 ============

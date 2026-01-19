@@ -455,9 +455,16 @@ class EInvoiceScraper:
         self.driver.quit()
         self.driver = None
 
-    def get_invoices(self) -> List[Invoice]:
+    def get_invoices(self, progress_callback=None) -> List[Invoice]:
         """
         使用 requests 取得發票列表
+
+        Args:
+            progress_callback: 可選的進度回調函數，簽名為 (current, total, stage, message)
+                - current: 當前處理的發票索引 (1-based)
+                - total: 發票總數
+                - stage: 階段 ('fetching_list', 'processing', 'done')
+                - message: 狀態訊息
 
         Returns:
             發票列表
@@ -540,12 +547,21 @@ class EInvoiceScraper:
 
             data = search_response.json()
             invoice_list = data.get('content', [])
-            logger.info(f"API 返回 {len(invoice_list)} 筆發票")
+            total_count = len(invoice_list)
+            logger.info(f"API 返回 {total_count} 筆發票")
 
-            if isinstance(invoice_list, list) and len(invoice_list) > 0:
-                for item in invoice_list:
+            # 回報取得列表完成
+            if progress_callback:
+                progress_callback(0, total_count, 'fetching_list', f'取得 {total_count} 筆發票，開始處理...')
+
+            if isinstance(invoice_list, list) and total_count > 0:
+                for idx, item in enumerate(invoice_list, 1):
                     invoice_token = item.get('token', '')
                     invoice_number = item.get('invoiceNumber', '')
+
+                    # 回報處理進度
+                    if progress_callback:
+                        progress_callback(idx, total_count, 'processing', f'處理發票 {idx}/{total_count}: {invoice_number}')
 
                     invoice_date = None
                     seller_name = None
@@ -596,6 +612,10 @@ class EInvoiceScraper:
                     invoices.append(invoice)
 
             logger.info(f"成功處理 {len(invoices)} 筆發票")
+
+            # 回報處理完成
+            if progress_callback:
+                progress_callback(total_count, total_count, 'done', f'完成！共處理 {len(invoices)} 筆發票')
 
         except Exception as e:
             logger.error(f"取得發票列表時發生錯誤: {e}")
