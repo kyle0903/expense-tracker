@@ -534,7 +534,7 @@ class EInvoiceScraper:
                 'Referer': 'https://www.einvoice.nat.gov.tw/',
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
             }
-            search_payload = {"token": jwt_token, "pageNumber":0, "pageSize": 100}
+            search_payload = {"token": jwt_token}
 
             search_response = requests.post(search_url, headers=search_headers, cookies=self.cookies, json=search_payload, timeout=30)
 
@@ -547,6 +547,29 @@ class EInvoiceScraper:
 
             data = search_response.json()
             invoice_list = data.get('content', [])
+
+            # 處理分頁 (如果有第2頁以上)
+            total_pages = data.get('totalPages', 0)
+            if total_pages > 1:
+                logger.info(f"發現共有 {total_pages} 頁，開始取得後續頁面...")
+                for page in range(1, total_pages):
+                    try:
+                        # 依據使用者需求：第二頁開始使用 GET 加上 query params: ?page={page}&size=10
+                        page_url = f"{search_url}?page={page}&size=10"
+                        logger.info(f"取得第 {page+1}/{total_pages} 頁: {page_url}")
+                        
+                        page_resp = requests.get(page_url, headers=search_headers, cookies=self.cookies, timeout=30)
+                        
+                        if page_resp.status_code == 200:
+                            page_data = page_resp.json()
+                            content = page_data.get('content', [])
+                            if content:
+                                invoice_list.extend(content)
+                                logger.info(f"第 {page+1} 頁取得 {len(content)} 筆資料")
+                        else:
+                            logger.warning(f"取得第 {page+1} 頁失敗: HTTP {page_resp.status_code}")
+                    except Exception as e:
+                        logger.error(f"取得第 {page+1} 頁時發生錯誤: {e}")
             total_count = len(invoice_list)
             logger.info(f"API 返回 {total_count} 筆發票")
 
