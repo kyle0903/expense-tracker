@@ -71,7 +71,7 @@ export default function SummaryPage() {
         setSummary(summaryData.data);
       }
       if (transactionsData.success) {
-        setTransactions(transactionsData.data.slice(0, 20)); // 顯示最近 20 筆
+        setTransactions(transactionsData.data);
       }
     } catch (error) {
       console.error('Failed to load data:', error);
@@ -95,6 +95,7 @@ export default function SummaryPage() {
   // 篩選後的交易記錄
   const filteredTransactions = transactions.filter(tx => {
     if (tx.category === '轉帳') return false; // 排除轉帳
+    if (tx.category === '代墊') return false;
     if (transactionFilter === 'all') return true;
     if (transactionFilter === 'expense') return tx.amount < 0;
     if (transactionFilter === 'income') return tx.amount > 0;
