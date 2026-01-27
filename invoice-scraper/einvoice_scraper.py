@@ -534,7 +534,7 @@ class EInvoiceScraper:
                 'Referer': 'https://www.einvoice.nat.gov.tw/',
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
             }
-            search_payload = {"token": jwt_token}
+            search_payload = {"token": jwt_token, "pageNumber":0, "pageSize": 100}
 
             search_response = requests.post(search_url, headers=search_headers, cookies=self.cookies, json=search_payload, timeout=30)
 
