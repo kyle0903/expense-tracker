@@ -805,7 +805,7 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
         /* 分類 Grid */
         .category-grid {
           display: grid;
-          grid-template-columns: repeat(4, 1fr);
+          grid-template-columns: repeat(3, 1fr);
           gap: 8px;
           margin-bottom: 16px;
         }
