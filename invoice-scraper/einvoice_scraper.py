@@ -558,7 +558,7 @@ class EInvoiceScraper:
                         page_url = f"{search_url}?page={page}&size=10"
                         logger.info(f"取得第 {page+1}/{total_pages} 頁: {page_url}")
                         
-                        page_resp = requests.get(page_url, headers=search_headers, cookies=self.cookies, timeout=30)
+                        page_resp = requests.post(page_url, headers=search_headers, cookies=self.cookies, json=search_payload, timeout=30)
                         
                         if page_resp.status_code == 200:
                             page_data = page_resp.json()
