@@ -860,7 +860,7 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
         /* 帳戶卡片 - 和分類風格一致 */
         .account-cards {
           display: grid;
-          grid-template-columns: repeat(3, 1fr);
+          grid-template-columns: repeat(4, 1fr);
           gap: 8px;
           margin-bottom: 16px;
         }
