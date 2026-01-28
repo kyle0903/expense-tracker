@@ -10,24 +10,24 @@ type TransactionFilter = 'all' | 'expense' | 'income';
 // 格式化日期時間顯示 (將 ISO 格式轉換為易讀的 MM/DD HH:mm)
 function formatDateTime(dateStr: string): string {
   if (!dateStr) return '';
-  
+
   try {
     // 嘗試解析為 Date 物件
     const date = new Date(dateStr);
     if (isNaN(date.getTime())) {
       return dateStr; // 無法解析，直接返回原字串
     }
-    
+
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     const hours = String(date.getHours()).padStart(2, '0');
     const minutes = String(date.getMinutes()).padStart(2, '0');
-    
+
     // 如果時間是 00:00，只顯示日期
     if (hours === '00' && minutes === '00') {
       return `${month}/${day}`;
     }
-    
+
     return `${month}/${day} ${hours}:${minutes}`;
   } catch {
     return dateStr;
@@ -47,6 +47,8 @@ export default function SummaryPage() {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
+
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   const [year, month] = selectedMonth.split('-').map(Number);
 
@@ -104,8 +106,8 @@ export default function SummaryPage() {
 
   if (loading) {
     return (
-      <div style={{ 
-        textAlign: 'center', 
+      <div style={{
+        textAlign: 'center',
         padding: '60px 0',
         color: 'var(--text-tertiary)',
       }}>
@@ -115,18 +117,18 @@ export default function SummaryPage() {
   }
 
   // 獲取當前 Tab 的分類統計
-  const currentCategoryData = categoryTab === 'expense' 
-    ? summary?.monthly.byCategoryExpense 
+  const currentCategoryData = categoryTab === 'expense'
+    ? summary?.monthly.byCategoryExpense
     : summary?.monthly.byCategoryIncome;
-  const currentTotal = categoryTab === 'expense' 
-    ? summary?.monthly.totalExpense 
+  const currentTotal = categoryTab === 'expense'
+    ? summary?.monthly.totalExpense
     : summary?.monthly.totalIncome;
 
   return (
     <div className="animate-fade-in" style={{ paddingBottom: '80px' }}>
       <header style={{ marginBottom: '24px' }}>
-        <h1 style={{ 
-          fontSize: '1.5rem', 
+        <h1 style={{
+          fontSize: '1.5rem',
           fontWeight: 600,
           color: 'var(--text-primary)',
           margin: 0,
@@ -136,11 +138,11 @@ export default function SummaryPage() {
       </header>
 
       {/* 月份選擇器 */}
-      <div 
+      <div
         className="card"
-        style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
+        style={{
+          display: 'flex',
+          alignItems: 'center',
           justifyContent: 'space-between',
           marginBottom: '20px',
           padding: '12px 16px',
@@ -166,8 +168,8 @@ export default function SummaryPage() {
       </div>
 
       {/* 月度摘要 */}
-      <div style={{ 
-        display: 'grid', 
+      <div style={{
+        display: 'grid',
         gridTemplateColumns: 'repeat(2, 1fr)',
         gap: '12px',
         marginBottom: '20px',
@@ -176,7 +178,7 @@ export default function SummaryPage() {
           <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
             本月收入
           </div>
-          <div 
+          <div
             className="amount amount-income animate-slide-up"
             style={{ fontSize: '1.5rem', marginTop: '4px' }}
           >
@@ -187,7 +189,7 @@ export default function SummaryPage() {
           <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
             本月支出
           </div>
-          <div 
+          <div
             className="amount amount-expense animate-slide-up"
             style={{ fontSize: '1.5rem', marginTop: '4px' }}
           >
@@ -197,17 +199,16 @@ export default function SummaryPage() {
       </div>
 
       {/* 月度結餘 */}
-      <div 
+      <div
         className="card"
         style={{ marginBottom: '20px', background: 'var(--bg-secondary)' }}
       >
         <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
           本月結餘
         </div>
-        <div 
-          className={`amount animate-slide-up ${
-            (summary?.monthly.balance || 0) >= 0 ? 'amount-income' : 'amount-expense'
-          }`}
+        <div
+          className={`amount animate-slide-up ${(summary?.monthly.balance || 0) >= 0 ? 'amount-income' : 'amount-expense'
+            }`}
           style={{ fontSize: '2rem', marginTop: '4px' }}
         >
           {(summary?.monthly.balance || 0) >= 0 ? '+' : ''}
@@ -216,12 +217,12 @@ export default function SummaryPage() {
       </div>
 
       {/* 年度摘要 */}
-      <div 
+      <div
         className="card"
         style={{ marginBottom: '24px' }}
       >
-        <div style={{ 
-          fontSize: '0.875rem', 
+        <div style={{
+          fontSize: '0.875rem',
           fontWeight: 600,
           marginBottom: '12px',
         }}>
@@ -242,9 +243,8 @@ export default function SummaryPage() {
           </div>
           <div style={{ textAlign: 'right' }}>
             <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>結餘</div>
-            <div className={`amount ${
-              (summary?.yearly.balance || 0) >= 0 ? 'amount-income' : 'amount-expense'
-            }`}>
+            <div className={`amount ${(summary?.yearly.balance || 0) >= 0 ? 'amount-income' : 'amount-expense'
+              }`}>
               {(summary?.yearly.balance || 0) >= 0 ? '+' : ''}
               ${summary?.yearly.balance.toLocaleString() || 0}
             </div>
@@ -254,24 +254,24 @@ export default function SummaryPage() {
 
       {/* 分類統計 */}
       <div style={{ marginBottom: '24px' }}>
-        <h2 style={{ 
-          fontSize: '0.875rem', 
+        <h2 style={{
+          fontSize: '0.875rem',
           fontWeight: 600,
           marginBottom: '12px',
         }}>
           分類統計
         </h2>
-        
+
         {/* Tab 切換 */}
-        <div style={{ 
-          display: 'flex', 
+        <div style={{
+          display: 'flex',
           gap: '8px',
           marginBottom: '12px',
         }}>
           <button
             onClick={() => setCategoryTab('expense')}
             className={`btn ${categoryTab === 'expense' ? 'btn-primary' : 'btn-secondary'}`}
-            style={{ 
+            style={{
               flex: 1,
               padding: '8px 16px',
             }}
@@ -281,7 +281,7 @@ export default function SummaryPage() {
           <button
             onClick={() => setCategoryTab('income')}
             className={`btn ${categoryTab === 'income' ? 'btn-primary' : 'btn-secondary'}`}
-            style={{ 
+            style={{
               flex: 1,
               padding: '8px 16px',
             }}
@@ -297,30 +297,32 @@ export default function SummaryPage() {
               .map(([category, amount]) => {
                 const percentage = currentTotal ? (amount / currentTotal) * 100 : 0;
                 return (
-                  <div 
+                  <div
                     key={category}
-                    style={{ 
+                    onClick={() => setSelectedCategory(category)}
+                    style={{
                       display: 'flex',
                       alignItems: 'center',
                       padding: '8px 0',
                       borderBottom: '1px solid var(--border-light)',
+                      cursor: 'pointer',
                     }}
                   >
                     <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: 500 }}>{category}</div>
-                      <div style={{ 
+                      <div style={{
                         height: '4px',
                         background: 'var(--bg-tertiary)',
                         borderRadius: '2px',
                         marginTop: '6px',
                         overflow: 'hidden',
                       }}>
-                        <div 
-                          style={{ 
+                        <div
+                          style={{
                             height: '100%',
                             width: `${Math.min(percentage, 100)}%`,
-                            background: categoryTab === 'expense' 
-                              ? 'var(--color-expense)' 
+                            background: categoryTab === 'expense'
+                              ? 'var(--color-expense)'
                               : 'var(--color-income)',
                             borderRadius: '2px',
                             transition: 'width 0.5s var(--ease-out)',
@@ -328,15 +330,15 @@ export default function SummaryPage() {
                         />
                       </div>
                     </div>
-                    <div style={{ 
+                    <div style={{
                       marginLeft: '16px',
                       textAlign: 'right',
                     }}>
                       <div className={`amount ${categoryTab === 'expense' ? 'amount-expense' : 'amount-income'}`}>
                         {categoryTab === 'expense' ? '-' : '+'}${amount.toLocaleString()}
                       </div>
-                      <div style={{ 
-                        fontSize: '0.75rem', 
+                      <div style={{
+                        fontSize: '0.75rem',
                         color: 'var(--text-secondary)',
                       }}>
                         {percentage.toFixed(1)}%
@@ -347,10 +349,10 @@ export default function SummaryPage() {
               })}
           </div>
         ) : (
-          <div 
+          <div
             className="card"
-            style={{ 
-              textAlign: 'center', 
+            style={{
+              textAlign: 'center',
               padding: '30px',
               color: 'var(--text-tertiary)',
             }}
@@ -362,8 +364,8 @@ export default function SummaryPage() {
 
       {/* 近期交易 */}
       <div>
-        <h2 style={{ 
-          fontSize: '0.875rem', 
+        <h2 style={{
+          fontSize: '0.875rem',
           fontWeight: 600,
           marginBottom: '12px',
         }}>
@@ -371,15 +373,15 @@ export default function SummaryPage() {
         </h2>
 
         {/* 篩選按鈕 */}
-        <div style={{ 
-          display: 'flex', 
+        <div style={{
+          display: 'flex',
           gap: '8px',
           marginBottom: '12px',
         }}>
           <button
             onClick={() => setTransactionFilter('all')}
             className={`btn ${transactionFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
-            style={{ 
+            style={{
               flex: 1,
               padding: '8px 12px',
               fontSize: '0.8125rem',
@@ -390,7 +392,7 @@ export default function SummaryPage() {
           <button
             onClick={() => setTransactionFilter('expense')}
             className={`btn ${transactionFilter === 'expense' ? 'btn-primary' : 'btn-secondary'}`}
-            style={{ 
+            style={{
               flex: 1,
               padding: '8px 12px',
               fontSize: '0.8125rem',
@@ -401,7 +403,7 @@ export default function SummaryPage() {
           <button
             onClick={() => setTransactionFilter('income')}
             className={`btn ${transactionFilter === 'income' ? 'btn-primary' : 'btn-secondary'}`}
-            style={{ 
+            style={{
               flex: 1,
               padding: '8px 12px',
               fontSize: '0.8125rem',
@@ -412,13 +414,13 @@ export default function SummaryPage() {
         </div>
 
         {filteredTransactions.length === 0 ? (
-          <div style={{ 
-            textAlign: 'center', 
+          <div style={{
+            textAlign: 'center',
             padding: '30px',
             color: 'var(--text-tertiary)',
           }}>
-            {transactionFilter === 'all' 
-              ? '本月尚無交易記錄' 
+            {transactionFilter === 'all'
+              ? '本月尚無交易記錄'
               : `本月尚無${transactionFilter === 'expense' ? '支出' : '收入'}記錄`}
           </div>
         ) : (
@@ -435,15 +437,15 @@ export default function SummaryPage() {
               >
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 500 }}>{tx.name}</div>
-                  <div style={{ 
-                    fontSize: '0.75rem', 
+                  <div style={{
+                    fontSize: '0.75rem',
                     color: 'var(--text-secondary)',
                     marginTop: '2px',
                   }}>
                     {tx.category} · {tx.account} · {formatDateTime(tx.date)}
                   </div>
                 </div>
-                <div 
+                <div
                   className={`amount ${tx.amount >= 0 ? 'amount-income' : 'amount-expense'}`}
                 >
                   {tx.amount >= 0 ? '+' : ''}${Math.abs(tx.amount).toLocaleString()}
@@ -453,6 +455,101 @@ export default function SummaryPage() {
           </div>
         )}
       </div>
+
+      {/* Category Details Modal */}
+      {selectedCategory && (
+        <div
+          onClick={() => setSelectedCategory(null)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.5)',
+            zIndex: 1000,
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'flex-end',
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            className="animate-slide-up"
+            style={{
+              background: 'var(--bg-primary)',
+              borderRadius: '20px 20px 0 0',
+              padding: '20px',
+              maxHeight: '80vh',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 -4px 20px rgba(0,0,0,0.1)',
+            }}
+          >
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '16px',
+            }}>
+              <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 600 }}>{selectedCategory} ({month}月)</h3>
+              <button
+                onClick={() => setSelectedCategory(null)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '1.5rem',
+                  cursor: 'pointer',
+                  color: 'var(--text-secondary)',
+                  padding: '4px',
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            <div style={{ overflowY: 'auto' }}>
+              {transactions
+                .filter(tx => tx.category === selectedCategory)
+                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                .map((tx, index) => (
+                  <div
+                    key={tx.id || index}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '12px 0',
+                      borderBottom: '1px solid var(--border-light)',
+                    }}
+                  >
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 500 }}>{tx.name}</div>
+                      <div style={{
+                        fontSize: '0.75rem',
+                        color: 'var(--text-secondary)',
+                        marginTop: '2px',
+                      }}>
+                        {tx.account} · {formatDateTime(tx.date)}
+                        {tx.note && <span style={{ marginLeft: '6px' }}>({tx.note})</span>}
+                      </div>
+                    </div>
+                    <div
+                      className={`amount ${tx.amount >= 0 ? 'amount-income' : 'amount-expense'}`}
+                    >
+                      {tx.amount >= 0 ? '+' : ''}${Math.abs(tx.amount).toLocaleString()}
+                    </div>
+                  </div>
+                ))}
+
+              {transactions.filter(tx => tx.category === selectedCategory).length === 0 && (
+                <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-tertiary)' }}>
+                  無此分類記錄
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
