@@ -12,7 +12,7 @@ import asyncio
 import queue
 import threading
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -33,6 +33,11 @@ logging.basicConfig(
 from einvoice_scraper import EInvoiceScraper, Invoice
 from notion_service import NotionService
 from category_classifier import classify_invoice
+
+# Global lock for login process
+login_lock = threading.Lock()
+last_login_attempt = 0
+
 
 
 # ============ Pydantic Models ============
@@ -163,13 +168,48 @@ async def clear_session():
     }
 
 
-@app.get("/ensure-session")
-async def ensure_session():
-    """
-    確保 session 有效，無效則自動登入
+def perform_background_login():
+    """背景執行登入任務"""
+    global last_login_attempt
     
-    用於 keep-alive 時順便維持登入狀態，
-    減少後續 API 呼叫時的登入時間
+    # 再次檢查鎖，雖然 BackgroundTasks 是依序執行，但為了保險
+    if not login_lock.acquire(blocking=False):
+        logger.info("背景登入任務跳過：已有其他登入正在進行")
+        return
+
+    try:
+        current_time = time.time()
+        # 防止短時間內頻繁重試 (例如 30 秒內不重試)
+        if current_time - last_login_attempt < 30:
+            logger.info("背景登入任務跳過：距離上次嘗試時間過短")
+            return
+
+        last_login_attempt = current_time
+        logger.info("開始執行背景登入流程...")
+        
+        scraper = get_scraper()
+        try:
+            if scraper.login():
+                logger.info("背景登入成功，Session 已更新")
+            else:
+                logger.error("背景登入失敗")
+        except Exception as e:
+            logger.error(f"背景登入發生錯誤: {e}")
+        finally:
+            scraper.close()
+            
+    finally:
+        login_lock.release()
+
+
+@app.get("/ensure-session")
+async def ensure_session(background_tasks: BackgroundTasks):
+    """
+    確保 session 有效，無效則觸發背景自動登入
+    
+    為了防止 cron-job.org 超時 (30s)，此 API 會立即回應：
+    - Session 有效 -> 200 OK
+    - Session 無效 -> 202 Accepted (並在背景開始登入)
     """
     scraper = get_scraper()
     
@@ -182,25 +222,33 @@ async def ensure_session():
                 "timestamp": datetime.now().isoformat()
             }
         
-        # 需要重新登入
-        start_time = time.time()
-        if scraper.login():
-            elapsed = time.time() - start_time
+        # Session 無效，需要重新登入
+        # 檢查是否已有登入正在進行
+        if login_lock.locked():
             return {
-                "status": "refreshed",
-                "message": f"已重新登入並緩存 session（耗時 {elapsed:.2f} 秒）",
+                "status": "pending",
+                "message": "登入程序已在背景執行中",
                 "timestamp": datetime.now().isoformat()
             }
-        else:
-            raise HTTPException(status_code=401, detail="登入失敗")
+            
+        # 觸發背景登入
+        background_tasks.add_task(perform_background_login)
+        
+        # 立即回應，不等待登入完成
+        return {
+            "status": "accepted",
+            "message": "Session 已過期，已觸發背景登入排程",
+            "timestamp": datetime.now().isoformat()
+        }
     
-    except HTTPException:
-        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Session 檢查失敗: {str(e)}")
     
     finally:
-        scraper.close()
+        # 這裡不需要 close，因為 scraper 只是用來檢查 session，沒有啟動瀏覽器
+        # 如果 _try_cached_session 啟動了什麼資源，應該在那裡處理
+        # 目前 scraper 在沒 login 前幾乎沒有資源占用
+        pass
 
 
 @app.get("/scrape", response_model=ScrapeResponse)

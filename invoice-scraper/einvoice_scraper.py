@@ -55,7 +55,7 @@ class EInvoiceScraper:
         'auth_token': None,
         'cached_at': None
     }
-    SESSION_TTL = 1800  # Session 有效期 30 分鐘
+    SESSION_TTL = 900  # Session 有效期 15 分鐘
 
     def __init__(self, phone: str, password: str, headless: bool = True):
         """
