@@ -307,20 +307,21 @@ class EInvoiceScraper:
         except Exception:
             return False
 
-    def login(self, max_retries: int = 3) -> bool:
+    def login(self, max_retries: int = 3, force_refresh: bool = False) -> bool:
         """
         登入財政部電子發票平台
 
         Args:
             max_retries: 驗證碼辨識失敗時的最大重試次數
+            force_refresh: 是否強制重新登入 (不使用快取)
 
         Returns:
             是否登入成功
         """
         logger.info("開始登入流程...")
 
-        # 先嘗試使用緩存的 session
-        if self._try_cached_session():
+        # 先嘗試使用緩存的 session (如果沒有強制刷新)
+        if not force_refresh and self._try_cached_session():
             logger.info("使用緩存的 session 成功")
             return True
         

@@ -189,7 +189,8 @@ def perform_background_login():
         
         scraper = get_scraper()
         try:
-            if scraper.login():
+            # 強制刷新 Session
+            if scraper.login(force_refresh=True):
                 logger.info("背景登入成功，Session 已更新")
             else:
                 logger.error("背景登入失敗")
@@ -205,24 +206,16 @@ def perform_background_login():
 @app.get("/ensure-session")
 async def ensure_session(background_tasks: BackgroundTasks):
     """
-    確保 session 有效，無效則觸發背景自動登入
+    不管 Session 是否有效，強制觸發背景登入以更新 Session
     
     為了防止 cron-job.org 超時 (30s)，此 API 會立即回應：
-    - Session 有效 -> 200 OK
-    - Session 無效 -> 202 Accepted (並在背景開始登入)
+    - 202 Accepted (並在背景開始登入)
     """
-    scraper = get_scraper()
+    # 這裡只需要做簡單的狀態回報，不需要初始化 scraper
     
     try:
-        # 先檢查緩存的 session 是否有效
-        if scraper._try_cached_session():
-            return {
-                "status": "cached",
-                "message": "Session 仍然有效",
-                "timestamp": datetime.now().isoformat()
-            }
+        # 強制觸發背景登入，不檢查快取
         
-        # Session 無效，需要重新登入
         # 檢查是否已有登入正在進行
         if login_lock.locked():
             return {
@@ -234,10 +227,10 @@ async def ensure_session(background_tasks: BackgroundTasks):
         # 觸發背景登入
         background_tasks.add_task(perform_background_login)
         
-        # 立即回應，不等待登入完成
+        # 立即回應
         return {
             "status": "accepted",
-            "message": "Session 已過期，已觸發背景登入排程",
+            "message": "已觸發背景強制登入排程",
             "timestamp": datetime.now().isoformat()
         }
     
