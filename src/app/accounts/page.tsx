@@ -71,22 +71,26 @@ export default function AccountsPage() {
     }
   }
 
-  // 計算總餘額
-  const totalBalance = accounts.reduce((sum, acc) => sum + (acc.balance || 0), 0);
+  // 計算總餘額（排除投資帳戶）
+  const totalBalance = accounts.reduce((sum, acc) => {
+    const isInvestmentAccount = acc.type?.includes('投資');
+    if (isInvestmentAccount) return sum;
+    return sum + (acc.balance || 0);
+  }, 0);
 
   return (
     <div className="animate-fade-in" style={{ paddingBottom: '80px' }}>
       <header style={{ marginBottom: '24px' }}>
-        <h1 style={{ 
-          fontSize: '1.5rem', 
+        <h1 style={{
+          fontSize: '1.5rem',
           fontWeight: 600,
           color: 'var(--text-primary)',
           margin: 0,
         }}>
           帳戶
         </h1>
-        <p style={{ 
-          fontSize: '0.875rem', 
+        <p style={{
+          fontSize: '0.875rem',
           color: 'var(--text-secondary)',
           marginTop: '4px',
         }}>
@@ -95,17 +99,17 @@ export default function AccountsPage() {
       </header>
 
       {/* 總覽卡片 */}
-      <div 
+      <div
         className="card"
         style={{ marginBottom: '20px', background: 'var(--bg-secondary)' }}
       >
         <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
           總資產
         </div>
-        <div 
+        <div
           className="amount animate-slide-up"
-          style={{ 
-            fontSize: '2rem', 
+          style={{
+            fontSize: '2rem',
             fontWeight: 700,
             marginTop: '4px',
           }}
@@ -117,16 +121,16 @@ export default function AccountsPage() {
       {/* 帳戶列表 */}
       <div style={{ marginBottom: '16px' }}>
         {loading ? (
-          <div style={{ 
-            textAlign: 'center', 
+          <div style={{
+            textAlign: 'center',
             padding: '40px',
             color: 'var(--text-tertiary)',
           }}>
             載入中...
           </div>
         ) : accounts.length === 0 ? (
-          <div style={{ 
-            textAlign: 'center', 
+          <div style={{
+            textAlign: 'center',
             padding: '40px',
             color: 'var(--text-tertiary)',
           }}>
@@ -138,7 +142,7 @@ export default function AccountsPage() {
               key={account.id}
               className="card animate-fade-in"
               onClick={() => router.push(`/accounts/${account.id}`)}
-              style={{ 
+              style={{
                 marginBottom: '12px',
                 animationDelay: `${index * 50}ms`,
                 cursor: 'pointer',
@@ -147,15 +151,15 @@ export default function AccountsPage() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
                   <div style={{ fontWeight: 600 }}>{account.name}</div>
-                  <div style={{ 
-                    fontSize: '0.8125rem', 
+                  <div style={{
+                    fontSize: '0.8125rem',
                     color: 'var(--text-secondary)',
                     marginTop: '2px',
                   }}>
                     {account.type}
                   </div>
                 </div>
-                <div 
+                <div
                   className="amount"
                   style={{ fontSize: '1.125rem' }}
                 >
