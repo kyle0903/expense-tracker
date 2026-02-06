@@ -73,7 +73,7 @@ export default function AccountsPage() {
 
   // 計算總餘額（排除投資帳戶）
   const totalBalance = accounts.reduce((sum, acc) => {
-    const isInvestmentAccount = acc.type?.includes('投資');
+    const isInvestmentAccount = acc.name?.includes('投資');
     if (isInvestmentAccount) return sum;
     return sum + (acc.balance || 0);
   }, 0);
