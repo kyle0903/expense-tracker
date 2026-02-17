@@ -166,10 +166,12 @@ class EInvoiceScraper:
         # 頁面載入策略：eager = DOM 準備好就繼續，不等待所有資源
         options.page_load_strategy = 'eager'
 
-        # 基本設定
+        # 基本設定（針對 0.1 CPU / 512MB 低資源環境優化）
         options.add_argument('--no-sandbox')
         options.add_argument('--disable-dev-shm-usage')
         options.add_argument('--disable-gpu')
+        options.add_argument('--single-process')  # 單進程模式，減少 CPU/記憶體使用
+        options.add_argument('--disable-software-rasterizer')  # 停用軟體光柵化，減少 CPU 負擔
         options.add_argument('--window-size=1280,720')  # 縮小視窗大小
         options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
 

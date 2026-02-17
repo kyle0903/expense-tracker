@@ -43,16 +43,17 @@ def classify_invoice(seller_name: str, details: str, transaction_time: str = Non
     client = OpenAI()
     
     # 建立分類提示
-    category_hints = "\n".join([
+    category_hints = "\n".join([   
         f"- {cat}: {', '.join(names)}"
         for cat, names in CATEGORY_SUGGESTIONS.items()
-    ])
+    ]) # 讓每個分類群裡面的類別都先顯示 - "分類1":"分類名稱1", "分類名稱2", ...}，然後再換行換下一個分類
+       # 用來做prompt的提示詞，讓AI知道我有這些分類，要將其從陣列轉成一般字串會比較好懂
     
     # 時間相關提示
     time_context = ""
     if transaction_time:
         time_context = f"\n交易時間: {transaction_time}"
-    
+
     prompt = f"""根據以下發票資訊，判斷消費的「名稱」和「分類」。
 
 商店: {seller_name}
@@ -82,28 +83,29 @@ def classify_invoice(seller_name: str, details: str, transaction_time: str = Non
 只回覆 JSON，不要有其他文字。"""
 
     try:
-        response = client.chat.completions.create(
-            model="gpt-4.1-mini",
+        response = client.chat.completions.create( # 等於是建立AI新對話
+            model="gpt-4.1-mini", # 要使用gpt-4.1-mini模型，也可換其他模型
+            
             messages=[
-                {"role": "user", "content": prompt}
+                {"role": "user", "content": prompt} # 要傳給AI的訊息，可以先設定角色，像是assistant或是system，類似這個對話的規則或是範例，但我這些都寫在prompt，所以已經夠清楚就直接使用user就好，content就是輸入內容，也就是上面的prompt
             ],
-            max_tokens=100,
-            temperature=0.3
+            max_tokens=100, # 限制回復的最大token數為100，但基本不會超過，因為我規則有固定回傳格式
+            temperature=0.3 # 控制模型輸出的隨機性，所以可能會一樣的prompt有不同結果，設定0的話是越不會改變
         )
         
-        result_text = response.choices[0].message.content.strip()
+        result_text = response.choices[0].message.content.strip() # 取得結果後將其前後的空白去除
         
         # 移除可能的 markdown 標記
-        if result_text.startswith("```"):
-            result_text = result_text.split("```")[1]
-            if result_text.startswith("json"):
-                result_text = result_text[4:]
+        if result_text.startswith("```"): # 因為markdown可能會有這個符號，需要先去除掉
+            result_text = result_text.split("```")[1] # 去除掉後取後面的字串
+            if result_text.startswith("json"): # 如果又有json開頭，就再去除掉
+                result_text = result_text[4:] # 那因為去除Json開頭，所以要從前面數4個字開始取
         
         import json
-        result = json.loads(result_text)
+        result = json.loads(result_text) # 將字串轉成json格式
         
         # 驗證分類
-        if result.get("category") not in CATEGORIES:
+        if result.get("category") not in CATEGORIES: # 如果分類不在CATEGORIES中，就回傳其他
             result["category"] = "其他"
         
         return result
