@@ -25,7 +25,7 @@ CATEGORY_SUGGESTIONS = {
 CATEGORIES = list(CATEGORY_SUGGESTIONS.keys())
 
 
-def classify_invoice(seller_name: str, details: str, transaction_time: str = None) -> dict:
+def classify_invoice(seller_name: str, details: str, transaction_time: str | None = None) -> dict:
     """
     使用 OpenAI 分類發票
     

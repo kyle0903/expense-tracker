@@ -26,11 +26,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # 設定 logging
-logger = logging.getLogger(__name__)
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, # 設定顯示的等級(INFO以上才會顯示)
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s' # 設定顯示的格式(時間-名稱-等級-訊息)
 )
+logger = logging.getLogger(__name__) 
+# 建立一個logger的object，名稱為__name__，也就是這個檔案的名稱，確保每個檔案都能有自己的logger
 
 
 @dataclass
