@@ -73,6 +73,8 @@ class EInvoiceScraper:
         self.driver = None
         self.cookies = {}           # 登入後的 cookies
         self.auth_token = None      # Authorization token
+        self.last_filtered_count = 0  # 最後一次過濾的發票數量
+        self.last_total_count = 0     # 最後一次 API 回傳的總發票數量
 
     def _is_session_valid(self) -> bool:
         """檢查緩存的 session 是否仍有效"""
@@ -575,11 +577,14 @@ class EInvoiceScraper:
                     except Exception as e:
                         logger.error(f"取得第 {page+1} 頁時發生錯誤: {e}")
             total_count = len(invoice_list)
+            self.last_total_count = total_count  # 儲存總數供外部讀取
             logger.info(f"API 返回 {total_count} 筆發票")
 
             # 回報取得列表完成
             if progress_callback:
                 progress_callback(0, total_count, 'fetching_list', f'取得 {total_count} 筆發票，開始處理...')
+
+            filtered_count = 0  # 追蹤被過濾的發票數量
 
             if isinstance(invoice_list, list) and total_count > 0:
                 for idx, item in enumerate(invoice_list, 1):
@@ -632,6 +637,7 @@ class EInvoiceScraper:
                     # 過濾特定賣家
                     if seller_name == "幣託科技股份有限公司":
                         logger.info(f"過濾賣家: {seller_name} (發票: {invoice_number})")
+                        filtered_count += 1
                         continue
 
                     invoice = Invoice(
@@ -643,11 +649,21 @@ class EInvoiceScraper:
                     )
                     invoices.append(invoice)
 
-            logger.info(f"成功處理 {len(invoices)} 筆發票")
+            # 儲存過濾數量供外部讀取
+            self.last_filtered_count = filtered_count
+
+            # 記錄處理結果
+            if filtered_count > 0:
+                logger.info(f"成功處理 {len(invoices)} 筆發票（API 返回 {total_count} 筆，已過濾 {filtered_count} 筆）")
+            else:
+                logger.info(f"成功處理 {len(invoices)} 筆發票")
 
             # 回報處理完成
             if progress_callback:
-                progress_callback(total_count, total_count, 'done', f'完成！共處理 {len(invoices)} 筆發票')
+                if filtered_count > 0:
+                    progress_callback(total_count, total_count, 'done', f'完成！API 返回 {total_count} 筆，已過濾 {filtered_count} 筆，處理 {len(invoices)} 筆發票')
+                else:
+                    progress_callback(total_count, total_count, 'done', f'完成！共處理 {len(invoices)} 筆發票')
 
         except Exception as e:
             logger.error(f"取得發票列表時發生錯誤: {e}")

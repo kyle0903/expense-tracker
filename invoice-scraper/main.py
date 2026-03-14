@@ -244,36 +244,6 @@ async def ensure_session(background_tasks: BackgroundTasks):
         pass
 
 
-@app.get("/scrape", response_model=ScrapeResponse)
-async def scrape_invoices():
-    """
-    執行爬蟲取得當月發票列表（不儲存）
-    
-    API 限制只能查詢當月發票
-    """
-    scraper = get_scraper()
-
-    try:
-        # 登入
-        if not scraper.login():
-            raise HTTPException(status_code=401, detail="登入失敗")
-
-        # 取得發票（固定查詢當月）
-        invoices = scraper.get_invoices()
-
-        return ScrapeResponse(
-            success=True,
-            message=f"成功取得 {len(invoices)} 筆發票",
-            invoices=[invoice_to_response(inv) for inv in invoices]
-        )
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    
-    finally:
-        scraper.close()
-
-
 @app.get("/notion-invoices", response_model=NotionInvoicesListResponse)
 async def get_notion_invoices(year: int = None, month: int = None):
     """
@@ -294,126 +264,6 @@ async def get_notion_invoices(year: int = None, month: int = None):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/scrape-and-save", response_model=SaveResponse)
-async def scrape_and_save_invoices():
-    """
-    執行爬蟲取得當月發票並儲存到 Notion
-
-    - 自動使用 OpenAI 分類
-    - 帳戶使用 Notion 中標記為載具帳戶的帳戶
-    """
-    scraper = get_scraper()
-    notion = NotionService()
-
-    # 取得載具帳戶
-    carrier_account = notion.get_carrier_account()
-    logger.info(f"使用載具帳戶: {carrier_account}")
-
-    saved_count = 0
-    skipped_count = 0
-    scraped_count = 0
-    saved_invoices = []
-
-    try:
-        # 登入
-        logger.info("開始登入財政部電子發票平台...")
-        if not scraper.login():
-            raise HTTPException(status_code=401, detail="登入失敗，請檢查帳號密碼")
-
-        # 取得發票（固定查詢當月）
-        logger.info("正在取得當月發票列表...")
-        invoices = scraper.get_invoices()
-        scraped_count = len(invoices)
-        logger.info(f"成功取得 {scraped_count} 筆發票")
-
-        for invoice in invoices:
-            # 檢查是否已存在（用發票號碼判斷）
-            if notion.invoice_exists(invoice.invoice_number):
-                skipped_count += 1
-                continue
-            
-            # 從發票日期提取時間 (HH:MM)
-            transaction_time = None
-            if invoice.invoice_date and 'T' in invoice.invoice_date:
-                try:
-                    time_part = invoice.invoice_date.split('T')[1][:5]  # 取 HH:MM
-                    transaction_time = time_part
-                except:
-                    pass
-            
-            # 使用 OpenAI 分類
-            classification = classify_invoice(
-                seller_name=invoice.seller_name,
-                details=invoice.details or "",
-                transaction_time=transaction_time
-            )
-            
-            # 準備備註
-            note = invoice.details or f"{invoice.invoice_number} - {invoice.seller_name}"
-            
-            # 儲存到 Notion
-            notion.create_transaction(
-                name=classification["name"],
-                category=classification["category"],
-                date=invoice.invoice_date,
-                amount=-abs(invoice.amount),  # 支出為負數
-                account=carrier_account,
-                note=note,
-                invoice_number=invoice.invoice_number,
-                seller_name=invoice.seller_name
-            )
-
-            saved_count += 1
-            # 加入完整分類資訊到回應
-            saved_invoices.append(SavedInvoiceResponse(
-                日期=invoice.invoice_date,
-                發票號碼=invoice.invoice_number,
-                店家=invoice.seller_name,
-                金額=-abs(invoice.amount),
-                明細=invoice.details,
-                名稱=classification["name"],
-                分類=classification["category"],
-                帳戶=carrier_account,
-                備註=note
-            ))
-        
-        return SaveResponse(
-            success=True,
-            message=f"儲存 {saved_count} 筆，跳過 {skipped_count} 筆重複（共爬取 {scraped_count} 筆）",
-            saved_count=saved_count,
-            skipped_count=skipped_count,
-            scraped_count=scraped_count,
-            saved_invoices=saved_invoices
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        error_msg = str(e)
-        logger.error(f"爬取發票時發生錯誤: {error_msg}")
-        
-        # 如果有部分成功，仍然返回結果
-        if scraped_count > 0 or saved_count > 0:
-            return SaveResponse(
-                success=False,
-                message=f"部分失敗：儲存 {saved_count} 筆，跳過 {skipped_count} 筆（共爬取 {scraped_count} 筆）",
-                saved_count=saved_count,
-                skipped_count=skipped_count,
-                scraped_count=scraped_count,
-                saved_invoices=saved_invoices,
-                error_detail=error_msg
-            )
-        
-        # 完全失敗
-        raise HTTPException(
-            status_code=500, 
-            detail=f"取得發票失敗: {error_msg}。請嘗試呼叫 /clear-session 後重試。"
-        )
-    
-    finally:
-        scraper.close()
 
 
 @app.get("/scrape-and-save-stream")
@@ -537,12 +387,15 @@ async def scrape_and_save_stream():
                 return
             
             scraped_count = len(invoices)
-            
+
+            # 簡化進度訊息：只顯示總發票數
+            saving_message = f'取得 {scraper.last_total_count} 筆發票，開始儲存到 Notion...'
+
             yield send_event('progress', {
                 'current': 0,
                 'total': scraped_count,
                 'stage': 'saving',
-                'message': f'取得 {scraped_count} 筆發票，開始儲存到 Notion...'
+                'message': saving_message
             })
             
             # 儲存到 Notion
@@ -616,10 +469,12 @@ async def scrape_and_save_stream():
                     'message': f'已儲存 {idx}/{scraped_count}: {classification["name"]}'
                 })
             
-            # 發送最終結果
+            # 簡化最終結果訊息：只顯示新增數量和總發票數
+            result_message = f'新增 {saved_count} 筆（共 {scraper.last_total_count} 筆發票）'
+
             yield send_event('result', {
                 'success': True,
-                'message': f'儲存 {saved_count} 筆，跳過 {skipped_count} 筆重複（共爬取 {scraped_count} 筆）',
+                'message': result_message,
                 'saved_count': saved_count,
                 'skipped_count': skipped_count,
                 'scraped_count': scraped_count,
