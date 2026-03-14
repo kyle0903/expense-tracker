@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { getAuthToken } from '@/lib/auth';
+import { useState, useEffect, useRef } from 'react';
+import { useAuthFetch } from '@/hooks/useAuthFetch';
+import { useAccounts } from '@/hooks/useAccounts';
 import type { Account } from '@/types';
 
 interface InvoiceAccountSelectorProps {
@@ -9,12 +10,13 @@ interface InvoiceAccountSelectorProps {
 }
 
 export default function InvoiceAccountSelector({ disabled }: InvoiceAccountSelectorProps) {
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [carrierAccount, setCarrierAccount] = useState<Account | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { accounts, isLoading: loading, mutate: mutateAccounts } = useAccounts();
+  const authFetch = useAuthFetch();
   const [saving, setSaving] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
+
+  const carrierAccount = accounts.find(a => a.isCarrierAccount) || null;
 
   // 點擊外部關閉下拉選單
   useEffect(() => {
@@ -27,33 +29,6 @@ export default function InvoiceAccountSelector({ disabled }: InvoiceAccountSelec
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // 取得帳戶列表
-  const fetchAccounts = useCallback(async () => {
-    try {
-      const token = getAuthToken();
-      const res = await fetch('/api/accounts', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-      const data = await res.json();
-      if (data.success) {
-        setAccounts(data.data);
-        // 找出載具帳戶
-        const carrier = data.data.find((a: Account) => a.isCarrierAccount);
-        setCarrierAccount(carrier || null);
-      }
-    } catch {
-      // 靜默處理錯誤
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchAccounts();
-  }, [fetchAccounts]);
-
   // 設定載具帳戶
   const handleSelectAccount = async (account: Account) => {
     if (account.id === carrierAccount?.id) {
@@ -64,23 +39,14 @@ export default function InvoiceAccountSelector({ disabled }: InvoiceAccountSelec
     setSaving(true);
     setIsOpen(false);
     try {
-      const token = getAuthToken();
-      const res = await fetch('/api/accounts/carrier', {
+      const res = await authFetch('/api/accounts/carrier', {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ accountId: account.id }),
       });
       const data = await res.json();
       if (data.success) {
-        setCarrierAccount(account);
-        // 更新本地帳戶列表的 isCarrierAccount 狀態
-        setAccounts(accounts.map(a => ({
-          ...a,
-          isCarrierAccount: a.id === account.id,
-        })));
+        mutateAccounts(); // 重新驗證帳戶資料
       }
     } catch {
       // 靜默處理錯誤
@@ -272,7 +238,6 @@ export default function InvoiceAccountSelector({ disabled }: InvoiceAccountSelec
           flex-shrink: 0;
         }
 
-        /* 深色模式 */
         @media (prefers-color-scheme: dark) {
           .carrier-dropdown {
             box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);

@@ -1,15 +1,14 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthFetch } from '@/hooks/useAuthFetch';
-import type { Account } from '@/types';
+import { useAccounts } from '@/hooks/useAccounts';
 
 export default function AccountsPage() {
   const router = useRouter();
   const authFetch = useAuthFetch();
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { accounts, isLoading: loading, mutate: mutateAccounts } = useAccounts();
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
@@ -19,25 +18,6 @@ export default function AccountsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const accountTypes = ['現金', '銀行帳戶', '信用卡', '儲值卡', '其他'];
-
-  // 載入帳戶
-  const loadAccounts = useCallback(async () => {
-    try {
-      const res = await authFetch('/api/accounts');
-      const data = await res.json();
-      if (data.success) {
-        setAccounts(data.data);
-      }
-    } catch (error) {
-      console.error('Failed to load accounts:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [authFetch]);
-
-  useEffect(() => {
-    loadAccounts();
-  }, [loadAccounts]);
 
   // 新增帳戶
   async function handleSubmit(e: React.FormEvent) {
@@ -59,7 +39,7 @@ export default function AccountsPage() {
       if (data.success) {
         setFormData({ name: '', type: '現金', initialBalance: '' });
         setShowForm(false);
-        loadAccounts();
+        mutateAccounts();
       } else {
         alert('新增失敗：' + data.error);
       }

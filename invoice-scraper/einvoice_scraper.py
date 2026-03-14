@@ -629,6 +629,11 @@ class EInvoiceScraper:
                         raw_amount = str(item.get('totalAmount', 0)).replace(',', '')
                         amount = int(raw_amount) if raw_amount else 0
 
+                    # 過濾特定賣家
+                    if seller_name == "幣託科技股份有限公司":
+                        logger.info(f"過濾賣家: {seller_name} (發票: {invoice_number})")
+                        continue
+
                     invoice = Invoice(
                         invoice_number=invoice_number,
                         invoice_date=invoice_date,

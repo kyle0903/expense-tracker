@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useAuthFetch } from '@/hooks/useAuthFetch';
-import type { Summary, Transaction } from '@/types';
+import { useState } from 'react';
+import { useSummary } from '@/hooks/useSummary';
+import type { Transaction } from '@/types';
 
 type CategoryTab = 'expense' | 'income';
 type TransactionFilter = 'all' | 'expense' | 'income';
@@ -12,10 +12,9 @@ function formatDateTime(dateStr: string): string {
   if (!dateStr) return '';
 
   try {
-    // 嘗試解析為 Date 物件
     const date = new Date(dateStr);
     if (isNaN(date.getTime())) {
-      return dateStr; // 無法解析，直接返回原字串
+      return dateStr;
     }
 
     const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -23,7 +22,6 @@ function formatDateTime(dateStr: string): string {
     const hours = String(date.getHours()).padStart(2, '0');
     const minutes = String(date.getMinutes()).padStart(2, '0');
 
-    // 如果時間是 00:00，只顯示日期
     if (hours === '00' && minutes === '00') {
       return `${month}/${day}`;
     }
@@ -35,14 +33,9 @@ function formatDateTime(dateStr: string): string {
 }
 
 export default function SummaryPage() {
-  const authFetch = useAuthFetch();
-  const [summary, setSummary] = useState<{ monthly: Summary; yearly: Summary } | null>(null);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [loading, setLoading] = useState(true);
   const [categoryTab, setCategoryTab] = useState<CategoryTab>('expense');
   const [transactionFilter, setTransactionFilter] = useState<TransactionFilter>('all');
 
-  // 使用 state 管理年月，允許切換
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -52,39 +45,8 @@ export default function SummaryPage() {
 
   const [year, month] = selectedMonth.split('-').map(Number);
 
-  // 載入資料
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    try {
-      // 計算該月的日期範圍
-      const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-      const lastDay = new Date(year, month, 0).getDate();
-      const endDate = `${year}-${String(month).padStart(2, '0')}-${lastDay}`;
-
-      const [summaryRes, transactionsRes] = await Promise.all([
-        authFetch(`/api/summary?year=${year}&month=${month}`),
-        authFetch(`/api/transactions?startDate=${startDate}&endDate=${endDate}`),
-      ]);
-
-      const summaryData = await summaryRes.json();
-      const transactionsData = await transactionsRes.json();
-
-      if (summaryData.success) {
-        setSummary(summaryData.data);
-      }
-      if (transactionsData.success) {
-        setTransactions(transactionsData.data);
-      }
-    } catch (error) {
-      console.error('Failed to load data:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [year, month, authFetch]);
-
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  // 使用 SWR hook 取得摘要 + 交易資料（單一 API 呼叫）
+  const { summary, transactions, isLoading: loading } = useSummary(year, month);
 
   // 切換月份
   const changeMonth = (delta: number) => {
@@ -96,7 +58,7 @@ export default function SummaryPage() {
 
   // 篩選後的交易記錄
   const filteredTransactions = transactions.filter(tx => {
-    if (tx.category === '轉帳') return false; // 排除轉帳
+    if (tx.category === '轉帳') return false;
     if (tx.category === '代墊') return false;
     if (transactionFilter === 'all') return true;
     if (transactionFilter === 'expense') return tx.amount < 0;
@@ -553,4 +515,3 @@ export default function SummaryPage() {
     </div>
   );
 }
-

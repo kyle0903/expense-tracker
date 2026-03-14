@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSummary } from '@/lib/notion';
+import { getSummaryWithTransactions } from '@/lib/notion';
 import { verifyAuthHeader, unauthorizedResponse } from '@/lib/auth-middleware';
-import type { Summary, ApiResponse } from '@/types';
+import type { Summary, Transaction, ApiResponse } from '@/types';
 
-// GET: 取得收支摘要
-export async function GET(request: NextRequest): Promise<NextResponse<ApiResponse<{ monthly: Summary; yearly: Summary }>>> {
+interface SummaryResponse {
+  monthly: Summary;
+  yearly: Summary;
+  transactions: Transaction[];
+}
+
+// GET: 取得收支摘要（含月度交易列表）
+export async function GET(request: NextRequest): Promise<NextResponse<ApiResponse<SummaryResponse>>> {
   // 驗證認證
   if (!verifyAuthHeader(request)) {
     return unauthorizedResponse();
@@ -19,14 +25,11 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
     const year = yearParam ? parseInt(yearParam) : now.getFullYear();
     const month = monthParam ? parseInt(monthParam) : now.getMonth() + 1;
 
-    const [monthly, yearly] = await Promise.all([
-      getSummary(year, month),
-      getSummary(year),
-    ]);
+    const result = await getSummaryWithTransactions(year, month);
 
     return NextResponse.json({
       success: true,
-      data: { monthly, yearly },
+      data: result,
     });
   } catch (error) {
     console.error('Failed to get summary:', error);

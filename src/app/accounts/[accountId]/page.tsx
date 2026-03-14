@@ -1,9 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuthFetch } from '@/hooks/useAuthFetch';
-import type { Transaction, Account } from '@/types';
+import { useAccounts } from '@/hooks/useAccounts';
+import { useAuthSWR } from '@/hooks/useSWRAuth';
+import type { Transaction } from '@/types';
 import { TransactionList } from '@/components/TransactionList';
 
 export default function AccountDetailPage() {
@@ -12,10 +14,15 @@ export default function AccountDetailPage() {
   const authFetch = useAuthFetch();
   const accountId = params.accountId as string;
 
-  const [account, setAccount] = useState<Account | null>(null);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { accounts, mutate: mutateAccounts } = useAccounts();
+  const { data: allTransactions, isLoading: txLoading, mutate: mutateTransactions } = useAuthSWR<Transaction[]>('/api/transactions');
+
+  const account = accounts.find(a => a.id === accountId) || null;
+
+  // 只顯示該帳戶的交易
+  const accountTransactions = (allTransactions ?? []).filter(
+    tx => tx.account === account?.name
+  );
 
   // 月份選擇器
   const now = new Date();
@@ -28,7 +35,7 @@ export default function AccountDetailPage() {
   const [isSavingBalance, setIsSavingBalance] = useState(false);
 
   // 過濾選中月份的交易
-  const filteredTransactions = transactions.filter((tx) => {
+  const filteredTransactions = accountTransactions.filter((tx) => {
     const txDate = new Date(tx.date);
     return txDate.getFullYear() === selectedYear && txDate.getMonth() + 1 === selectedMonth;
   });
@@ -36,7 +43,6 @@ export default function AccountDetailPage() {
   // 計算選中月份的交易加總
   const monthlyTransactionSum = filteredTransactions
     .reduce((sum, tx) => {
-      // 排除轉帳類型
       if (tx.category === '轉帳') return sum;
       return sum + tx.amount;
     }, 0);
@@ -52,49 +58,13 @@ export default function AccountDetailPage() {
     });
   }
 
-  // 載入資料
-  const loadData = useCallback(async () => {
-    if (!accountId) return;
-
-    setLoading(true);
-    try {
-      // 先載入所有帳戶來取得帳戶資訊和名稱
-      const accRes = await authFetch('/api/accounts');
-      const accData = await accRes.json();
-
-      if (accData.success) {
-        setAccounts(accData.data);
-        const currentAccount = accData.data.find((a: Account) => a.id === accountId);
-
-        if (currentAccount) {
-          setAccount(currentAccount);
-
-          // 取得該帳戶的交易記錄
-          const txRes = await authFetch('/api/transactions');
-          const txData = await txRes.json();
-
-          if (txData.success) {
-            // 過濾該帳戶的交易
-            const filtered = txData.data.filter(
-              (tx: Transaction) => tx.account === currentAccount.name
-            );
-            setTransactions(filtered);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Failed to load data:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [accountId, authFetch]);
-
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
-
-  // 更新交易
+  // 更新交易（樂觀更新）
   const handleUpdate = async (transaction: Transaction) => {
+    const optimisticData = (allTransactions ?? []).map(tx =>
+      tx.id === transaction.id ? { ...tx, ...transaction } : tx
+    );
+    mutateTransactions(optimisticData, false);
+
     try {
       const res = await authFetch('/api/transactions', {
         method: 'PUT',
@@ -103,19 +73,27 @@ export default function AccountDetailPage() {
       });
       const data = await res.json();
       if (data.success) {
-        loadData();
+        mutateTransactions();
+        mutateAccounts();
       } else {
+        mutateTransactions();
         alert('更新失敗：' + data.error);
       }
     } catch (error) {
+      mutateTransactions();
       console.error('Failed to update:', error);
       alert('更新失敗');
     }
   };
 
-  // 刪除交易
+  // 刪除交易（樂觀更新）
   const handleDelete = async (id: string) => {
     if (!confirm('確定要刪除這筆交易記錄嗎？')) return;
+
+    mutateTransactions(
+      (allTransactions ?? []).filter(tx => tx.id !== id),
+      false
+    );
 
     try {
       const res = await authFetch(`/api/transactions?id=${id}`, {
@@ -123,11 +101,14 @@ export default function AccountDetailPage() {
       });
       const data = await res.json();
       if (data.success) {
-        loadData();
+        mutateTransactions();
+        mutateAccounts();
       } else {
+        mutateTransactions();
         alert('刪除失敗：' + data.error);
       }
     } catch (error) {
+      mutateTransactions();
       console.error('Failed to delete:', error);
       alert('刪除失敗');
     }
@@ -160,7 +141,7 @@ export default function AccountDetailPage() {
       const data = await res.json();
       if (data.success) {
         setIsEditingBalance(false);
-        loadData();
+        mutateAccounts();
       } else {
         alert('更新失敗：' + data.error);
       }
@@ -171,6 +152,8 @@ export default function AccountDetailPage() {
       setIsSavingBalance(false);
     }
   };
+
+  const loading = !accounts.length || txLoading;
 
   if (loading) {
     return (

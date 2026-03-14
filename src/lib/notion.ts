@@ -10,6 +10,17 @@ const notion = new Client({
 const TRANSACTIONS_DB_ID = process.env.NOTION_TRANSACTIONS_DB_ID!;
 const ACCOUNTS_DB_ID = process.env.NOTION_ACCOUNTS_DB_ID!;
 
+// --- Accounts Cache ---
+const ACCOUNTS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+let accountsCache: { data: Account[] | null; timestamp: number } = {
+  data: null,
+  timestamp: 0,
+};
+
+export function invalidateAccountsCache(): void {
+  accountsCache = { data: null, timestamp: 0 };
+}
+
 /**
  * 新增交易記錄到 Notion
  */
@@ -46,6 +57,7 @@ export async function createTransaction(transaction: Transaction): Promise<strin
     },
   });
 
+  invalidateAccountsCache(); // account balance changed
   return response.id;
 }
 
@@ -108,11 +120,16 @@ export async function getTransactions(
  * 查詢帳戶列表
  */
 export async function getAccounts(): Promise<Account[]> {
+  // Return cached data if valid
+  if (accountsCache.data && Date.now() - accountsCache.timestamp < ACCOUNTS_CACHE_TTL) {
+    return accountsCache.data;
+  }
+
   const response = await notion.databases.query({
     database_id: ACCOUNTS_DB_ID,
   });
 
-  return response.results.map((page: any) => {
+  const accounts = response.results.map((page: any) => {
     const props = page.properties;
     return {
       id: page.id,
@@ -124,6 +141,9 @@ export async function getAccounts(): Promise<Account[]> {
       isCarrierAccount: props['載具帳戶']?.checkbox || false,
     };
   });
+
+  accountsCache = { data: accounts, timestamp: Date.now() };
+  return accounts;
 }
 
 /**
@@ -145,6 +165,7 @@ export async function createAccount(account: Omit<Account, 'id' | 'transactionSu
     },
   });
 
+  invalidateAccountsCache();
   return response.id;
 }
 
@@ -177,28 +198,14 @@ export async function updateAccount(
     page_id: id,
     properties,
   });
+
+  invalidateAccountsCache();
 }
 
 /**
- * 計算收支摘要
+ * 從交易陣列計算收支摘要（純函式，不呼叫 API）
  */
-export async function getSummary(year: number, month?: number): Promise<Summary> {
-  let startDate: string;
-  let endDate: string;
-
-  if (month) {
-    // 當月摘要
-    startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-    const lastDay = new Date(year, month, 0).getDate();
-    endDate = `${year}-${String(month).padStart(2, '0')}-${lastDay}`;
-  } else {
-    // 當年摘要
-    startDate = `${year}-01-01`;
-    endDate = `${year}-12-31`;
-  }
-
-  const transactions = await getTransactions(startDate, endDate);
-
+export function computeSummary(transactions: Transaction[]): Summary {
   let totalIncome = 0;
   let totalExpense = 0;
   const byCategory: Record<string, number> = {};
@@ -213,19 +220,16 @@ export async function getSummary(year: number, month?: number): Promise<Summary>
 
     if (tx.amount > 0) {
       totalIncome += tx.amount;
-      // 收入分類統計
       if (tx.category) {
         byCategoryIncome[tx.category] = (byCategoryIncome[tx.category] || 0) + tx.amount;
       }
     } else {
       totalExpense += Math.abs(tx.amount);
-      // 支出分類統計
       if (tx.category) {
         byCategoryExpense[tx.category] = (byCategoryExpense[tx.category] || 0) + Math.abs(tx.amount);
       }
     }
 
-    // 保留向後兼容的總分類統計
     if (tx.category) {
       byCategory[tx.category] = (byCategory[tx.category] || 0) + Math.abs(tx.amount);
     }
@@ -238,6 +242,62 @@ export async function getSummary(year: number, month?: number): Promise<Summary>
     byCategory,
     byCategoryExpense,
     byCategoryIncome,
+  };
+}
+
+/**
+ * 計算收支摘要
+ */
+export async function getSummary(year: number, month?: number): Promise<Summary> {
+  let startDate: string;
+  let endDate: string;
+
+  if (month) {
+    startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+    const lastDay = new Date(year, month, 0).getDate();
+    endDate = `${year}-${String(month).padStart(2, '0')}-${lastDay}`;
+  } else {
+    startDate = `${year}-01-01`;
+    endDate = `${year}-12-31`;
+  }
+
+  const transactions = await getTransactions(startDate, endDate);
+  return computeSummary(transactions);
+}
+
+/**
+ * 一次取得年度交易，計算月度與年度摘要，並回傳月度交易列表
+ * 只需 1 次 Notion 查詢（+ 1 次 cached getAccounts）
+ */
+export async function getSummaryWithTransactions(
+  year: number,
+  month: number
+): Promise<{
+  monthly: Summary;
+  yearly: Summary;
+  transactions: Transaction[];
+}> {
+  // 取得整年交易（1 次 Notion query）
+  const yearlyTransactions = await getTransactions(
+    `${year}-01-01`,
+    `${year}-12-31`
+  );
+
+  // 在記憶體中篩選當月子集
+  const monthStr = String(month).padStart(2, '0');
+  const monthStart = `${year}-${monthStr}-01`;
+  const lastDay = new Date(year, month, 0).getDate();
+  const monthEnd = `${year}-${monthStr}-${lastDay}`;
+
+  const monthlyTransactions = yearlyTransactions.filter((tx) => {
+    const txDate = tx.date.slice(0, 10);
+    return txDate >= monthStart && txDate <= monthEnd;
+  });
+
+  return {
+    monthly: computeSummary(monthlyTransactions),
+    yearly: computeSummary(yearlyTransactions),
+    transactions: monthlyTransactions,
   };
 }
 
@@ -290,6 +350,8 @@ export async function updateTransaction(
     page_id: id,
     properties,
   });
+
+  invalidateAccountsCache(); // account balance may have changed
 }
 
 /**
@@ -300,6 +362,8 @@ export async function deleteTransaction(id: string): Promise<void> {
     page_id: id,
     archived: true,
   });
+
+  invalidateAccountsCache(); // account balance changed
 }
 
 /**
@@ -393,4 +457,6 @@ export async function setCarrierAccount(accountId: string): Promise<void> {
       '載具帳戶': { checkbox: true },
     },
   });
+
+  invalidateAccountsCache();
 }

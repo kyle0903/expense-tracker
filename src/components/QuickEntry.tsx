@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
+import { useSWRConfig } from 'swr';
 import { useAuthFetch } from '@/hooks/useAuthFetch';
-import type { Transaction, Account } from '@/types';
+import { useAccounts } from '@/hooks/useAccounts';
+import type { Transaction } from '@/types';
 import { DEFAULT_CATEGORIES, CATEGORY_SUGGESTIONS } from '@/types';
 
 interface QuickEntryProps {
@@ -35,7 +37,6 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
   const [category, setCategory] = useState<string>('');
   const [account, setAccount] = useState<string>('');
   const [toAccount, setToAccount] = useState<string>('');
-  const [accounts, setAccounts] = useState<Account[]>([]);
   const [note, setNote] = useState('');
   const [name, setName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -54,28 +55,30 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
   const [transferSubMode, setTransferSubMode] = useState<'transfer' | 'repayment'>('transfer');
 
   const authFetch = useAuthFetch();
+  const { accounts, mutate: mutateAccounts } = useAccounts();
+  const { mutate: globalMutate } = useSWRConfig();
 
-  // 載入帳戶列表
+  // 設定預設帳戶
   useEffect(() => {
-    async function loadAccounts() {
-      try {
-        const res = await authFetch('/api/accounts');
-        const data = await res.json();
-        if (data.success && data.data) {
-          setAccounts(data.data);
-          if (data.data.length > 0 && !account) {
-            setAccount(data.data[0].name);
-          }
-          if (data.data.length > 1 && !toAccount) {
-            setToAccount(data.data[1].name);
-          }
-        }
-      } catch (error) {
-        console.error('Failed to load accounts:', error);
-      }
+    if (accounts.length > 0 && !account) {
+      setAccount(accounts[0].name);
     }
-    loadAccounts();
-  }, [authFetch]);
+    if (accounts.length > 1 && !toAccount) {
+      setToAccount(accounts[1].name);
+    }
+  }, [accounts, account, toAccount]);
+
+  // 成功後的快取失效
+  const invalidateCaches = useCallback(() => {
+    mutateAccounts(); // 重新驗證帳戶餘額
+    globalMutate(
+      (key: unknown) => typeof key === 'string' && (
+        key.startsWith('/api/transactions') || key.startsWith('/api/summary')
+      ),
+      undefined,
+      { revalidate: true }
+    );
+  }, [mutateAccounts, globalMutate]);
 
   // 取得當前分類列表
   const categories = DEFAULT_CATEGORIES.filter(
@@ -162,6 +165,7 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
 
           const data = await res.json();
           if (data.success) {
+            invalidateCaches();
             setShowSuccess(true);
             setTimeout(() => {
               setShowSuccess(false);
@@ -194,6 +198,7 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
 
           const data = await res.json();
           if (data.success) {
+            invalidateCaches();
             setShowSuccess(true);
             setTimeout(() => {
               setShowSuccess(false);
@@ -266,6 +271,7 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
           const data2 = await res2.json();
 
           if (data1.success && data2.success) {
+            invalidateCaches();
             setShowSuccess(true);
             setTimeout(() => {
               setShowSuccess(false);
@@ -301,6 +307,7 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
 
           const data = await res.json();
           if (data.success) {
+            invalidateCaches();
             setShowSuccess(true);
             setTimeout(() => {
               setShowSuccess(false);
@@ -718,703 +725,125 @@ export function QuickEntry({ onSuccess }: QuickEntryProps) {
           background: #10b981;
         }
 
-        /* 還款資訊 */
-        .repayment-info {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 8px;
-          padding: 20px;
-          background: var(--bg-secondary);
-          border-radius: 12px;
-          margin-bottom: 16px;
-          border: 1px dashed var(--border-medium);
-        }
-
-        .repayment-text {
-          font-size: 0.85rem;
-          color: var(--text-secondary);
-          text-align: center;
-        }
-
-        /* 金額卡片 */
-        .amount-card {
-          background: var(--bg-secondary);
-          border-radius: 16px;
-          padding: 24px;
-          text-align: center;
-          cursor: pointer;
-          margin-bottom: 20px;
-          border: 2px solid transparent;
-          transition: all 0.2s;
-        }
-
-        .amount-card:hover {
-          border-color: var(--border-medium);
-        }
-
-        .amount-card.expense .amount-value {
-          color: var(--color-expense);
-        }
-
-        .amount-card.income .amount-value {
-          color: var(--color-income);
-        }
-
-        .amount-card.transfer .amount-value {
-          color: var(--color-accent);
-        }
-
-        .amount-card.repayment .amount-value {
-          color: #10b981;
-        }
-
-        .amount-label {
-          font-size: 0.8rem;
-          color: var(--text-secondary);
-          margin-bottom: 8px;
-        }
-
-        .amount-value {
-          font-size: 2.5rem;
-          font-weight: 700;
-          font-variant-numeric: tabular-nums;
-        }
-
-        .amount-sign {
-          font-size: 1.5rem;
-          opacity: 0.7;
-        }
-
-        .amount-currency {
-          font-size: 1.5rem;
-          margin-right: 2px;
-        }
-
-        .amount-tap-hint {
-          font-size: 0.75rem;
-          color: var(--text-tertiary);
-          margin-top: 8px;
-        }
-
-        /* 快速選項區 */
-        .quick-options {
-          margin-bottom: 20px;
-        }
-
-        /* 分類 Grid */
-        .category-grid {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 8px;
-          margin-bottom: 16px;
-        }
-
-        .category-item {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 4px;
-          padding: 12px 8px;
-          border: none;
-          border-radius: 12px;
-          background: var(--bg-secondary);
-          color: var(--text-primary);
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-
-        .category-item.selected {
-          background: var(--color-accent);
-          color: white;
-        }
-
-        /* 支出模式 - 分類選中用紅色 */
-        .quick-options.expense .category-item.selected {
-          background: var(--color-expense);
-        }
-
-        /* 收入模式 - 分類選中用綠色 */
-        .quick-options.income .category-item.selected {
-          background: var(--color-income);
-        }
-
-        .category-icon {
-          font-size: 1.25rem;
-        }
-
-        .category-name {
-          font-size: 0.75rem;
-        }
-
-        /* 區塊標籤 */
-        .section-label {
-          font-size: 0.8rem;
-          font-weight: 500;
-          color: var(--text-secondary);
-          margin-bottom: 10px;
-          margin-top: 8px;
-          padding-left: 4px;
-        }
-
-        /* 帳戶卡片 - 和分類風格一致 */
-        .account-cards {
-          display: grid;
-          grid-template-columns: repeat(4, 1fr);
-          gap: 8px;
-          margin-bottom: 16px;
-        }
-
-        .account-card {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 4px;
-          padding: 12px 8px;
-          border: none;
-          border-radius: 12px;
-          background: var(--bg-secondary);
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-
-        .account-card.selected {
-          background: var(--color-accent);
-        }
-
-        /* 支出模式 - 帳戶選中用淺紅色 */
-        .quick-options.expense .account-card.selected {
-          background: rgba(239, 68, 68, 0.2);
-          border: 1px solid var(--color-expense);
-        }
-
-        .quick-options.expense .account-card.selected .account-card-name {
-          color: var(--color-expense);
-        }
-
-        .quick-options.expense .account-card.selected .account-card-balance {
-          color: var(--color-expense);
-          opacity: 0.8;
-        }
-
-        /* 轉帳模式 - 帳戶選中用淺藍色 */
-        .quick-options.transfer .account-card.selected {
-          background: rgba(59, 130, 246, 0.2);
-          border: 1px solid var(--color-accent);
-        }
-
-        .quick-options.transfer .account-card.selected .account-card-name {
-          color: var(--color-accent);
-        }
-
-        .quick-options.transfer .account-card.selected .account-card-balance {
-          color: var(--color-accent);
-          opacity: 0.8;
-        }
-
-        /* 收入模式 - 帳戶選中用淺綠色 */
-        .quick-options.income .account-card.selected {
-          background: rgba(34, 197, 94, 0.2);
-          border: 1px solid var(--color-income);
-        }
-
-        .quick-options.income .account-card.selected .account-card-name {
-          color: var(--color-income);
-        }
-
-        .quick-options.income .account-card.selected .account-card-balance {
-          color: var(--color-income);
-          opacity: 0.8;
-        }
-
-        .account-card-name {
-          font-size: 0.85rem;
-          font-weight: 600;
-          color: var(--text-primary);
-        }
-
-        .account-card.selected .account-card-name {
-          color: white;
-        }
-
-        .account-card-balance {
-          font-size: 0.7rem;
-          color: var(--text-secondary);
-        }
-
-        .account-card.selected .account-card-balance {
-          color: rgba(255, 255, 255, 0.8);
-        }
-
-        /* 保留舊的 account-row 給轉帳/還款模式使用 */
-        .account-row {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 14px 16px;
-          background: var(--bg-secondary);
-          border-radius: 12px;
-          margin-bottom: 12px;
-          cursor: pointer;
-          border-left: 4px solid var(--color-accent);
-        }
-
-        .account-label {
-          color: var(--text-primary);
-          font-size: 0.9rem;
-          font-weight: 500;
-        }
-
-        .account-value {
-          color: var(--color-accent);
-          font-weight: 600;
-        }
-
-        .account-dropdown {
-          background: var(--bg-primary);
-          border: 1px solid var(--border-light);
-          border-radius: 12px;
-          margin-bottom: 12px;
-          overflow: hidden;
-        }
-
-        .account-option {
-          display: flex;
-          justify-content: space-between;
-          padding: 14px 16px;
-          cursor: pointer;
-          transition: background 0.15s;
-        }
-
-        .account-option:hover {
-          background: var(--bg-hover);
-        }
-
-        .account-option.selected {
-          background: var(--bg-hover);
-        }
-
-        .account-balance {
-          color: var(--text-secondary);
-          font-size: 0.85rem;
-        }
-
-        /* 轉帳子模式切換 */
-        .transfer-sub-tabs {
-          display: flex;
-          gap: 8px;
-          margin-bottom: 16px;
-        }
-
-        .transfer-sub-tab {
-          flex: 1;
-          padding: 10px 12px;
-          border: 1px solid var(--border-light);
-          border-radius: 10px;
-          background: transparent;
-          color: var(--text-secondary);
-          font-size: 0.85rem;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-
-        .transfer-sub-tab.active {
-          background: var(--color-accent);
-          border-color: var(--color-accent);
-          color: white;
-        }
-
-        /* 轉帳帳戶 */
-        .transfer-accounts {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          margin-bottom: 12px;
-        }
-
-        .transfer-account {
-          flex: 1;
-          padding: 14px;
-          background: var(--bg-secondary);
-          border-radius: 12px;
-          text-align: center;
-          cursor: pointer;
-        }
-
-        .transfer-label {
-          font-size: 0.75rem;
-          color: var(--text-secondary);
-          margin-bottom: 4px;
-        }
-
-        .transfer-name {
-          font-weight: 500;
-          color: var(--text-primary);
-        }
-
-        .transfer-arrow {
-          color: var(--text-tertiary);
-          font-size: 1.2rem;
-        }
-
-        /* 代墊功能樣式 */
-        .split-payment-section {
-          background: var(--bg-secondary);
-          border-radius: 12px;
-          margin-bottom: 12px;
-          margin-top: 12px;
-          overflow: hidden;
-        }
-
-        .split-toggle-row {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 14px 16px;
-          cursor: pointer;
-        }
-
-        .split-label {
-          font-size: 0.9rem;
-          color: var(--text-primary);
-          font-weight: 500;
-        }
-
-        .toggle-switch {
-          width: 44px;
-          height: 24px;
-          background: var(--border-medium);
-          border-radius: 12px;
-          position: relative;
-          transition: background 0.2s;
-        }
-
-        .toggle-switch.active {
-          background: var(--color-accent);
-        }
-
-        /* 支出模式 - toggle 用紅色 */
-        .quick-options.expense .toggle-switch.active {
-          background: var(--color-expense);
-        }
-
-        .toggle-knob {
-          width: 20px;
-          height: 20px;
-          background: white;
-          border-radius: 50%;
-          position: absolute;
-          top: 2px;
-          left: 2px;
-          transition: transform 0.2s;
-        }
-
-        .toggle-switch.active .toggle-knob {
-          transform: translateX(20px);
-        }
-
-        .split-options {
-          padding: 0 16px 16px;
-          border-top: 1px solid var(--border-light);
-        }
-
-        .split-mode-tabs {
-          display: flex;
-          gap: 8px;
-          margin: 12px 0;
-        }
-
-        .split-mode-tab {
-          flex: 1;
-          padding: 8px 12px;
-          border: 1px solid var(--border-light);
-          border-radius: 8px;
-          background: transparent;
-          color: var(--text-secondary);
-          font-size: 0.8rem;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-
-        .split-mode-tab.active {
-          background: var(--color-accent-bg);
-          border-color: var(--color-accent);
-          color: var(--color-accent);
-        }
-
-        /* 支出模式 - 代墊選項用紅色 */
-        .quick-options.expense .split-mode-tab.active {
-          background: rgba(239, 68, 68, 0.1);
-          border-color: var(--color-expense);
-          color: var(--color-expense);
-        }
-
-        .people-selector {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 12px;
-        }
-
-        .people-label {
-          font-size: 0.85rem;
-          color: var(--text-secondary);
-        }
-
-        .people-buttons {
-          display: flex;
-          gap: 6px;
-        }
-
-        .people-btn {
-          width: 36px;
-          height: 36px;
-          border: 1px solid var(--border-light);
-          border-radius: 8px;
-          background: transparent;
-          color: var(--text-primary);
-          font-size: 0.9rem;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-
-        .people-btn.selected {
-          background: var(--color-accent);
-          border-color: var(--color-accent);
-          color: white;
-        }
-
-        /* 支出模式 - 人數按鈕用紅色 */
-        .quick-options.expense .people-btn.selected {
-          background: var(--color-expense);
-          border-color: var(--color-expense);
-        }
-
-        .custom-split-input {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: 12px;
-          margin-bottom: 12px;
-        }
-
-        .custom-split-label {
-          font-size: 0.85rem;
-          color: var(--text-secondary);
-          white-space: nowrap;
-        }
-
-        .custom-split-input .note-input {
-          flex: 1;
-          margin: 0;
-        }
-
-        .split-summary {
-          background: var(--bg-primary);
-          border-radius: 8px;
-          padding: 12px;
-        }
-
-        .split-summary-row {
-          display: flex;
-          justify-content: space-between;
-          padding: 6px 0;
-          font-size: 0.85rem;
-          color: var(--text-secondary);
-        }
-
-        .split-summary-row.highlight {
-          border-top: 1px dashed var(--border-light);
-          margin-top: 6px;
-          padding-top: 12px;
-          font-weight: 600;
-          color: var(--text-primary);
-        }
-
-        .split-total {
-          color: var(--text-primary);
-        }
-
-        .split-others {
-          color: var(--color-accent);
-        }
-
-        .split-own {
-          color: var(--color-expense);
-          font-size: 1rem;
-        }
-
-        /* 名稱建議 */
-        .name-suggestions {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 8px;
-          margin-bottom: 12px;
-        }
-
-        .suggestion-chip {
-          padding: 6px 12px;
-          border: 1px solid var(--border-light);
-          border-radius: 16px;
-          background: transparent;
-          color: var(--text-secondary);
-          font-size: 0.8rem;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-
-        .suggestion-chip.selected {
-          background: var(--color-accent-bg);
-          border-color: var(--color-accent);
-          color: var(--color-accent);
-        }
-
-        /* 支出模式 - 名稱建議用紅色 */
-        .quick-options.expense .suggestion-chip.selected {
-          background: rgba(239, 68, 68, 0.1);
-          border-color: var(--color-expense);
-          color: var(--color-expense);
-        }
-
-        /* 收入模式 - 名稱建議用綠色 */
-        .quick-options.income .suggestion-chip.selected {
-          background: rgba(34, 197, 94, 0.1);
-          border-color: var(--color-income);
-          color: var(--color-income);
-        }
-
-        /* 備註輸入 */
-        .note-input {
-          width: 100%;
-          padding: 14px 16px;
-          border: 1px solid var(--border-light);
-          border-radius: 12px;
-          background: var(--bg-primary);
-          color: var(--text-primary);
-          font-size: 0.9rem;
-        }
-
-        .note-input::placeholder {
-          color: var(--text-tertiary);
-        }
-
-        /* 送出按鈕 */
-        .submit-btn {
-          width: 100%;
-          padding: 16px;
-          border: none;
-          border-radius: 12px;
-          font-size: 1rem;
-          font-weight: 600;
-          color: white;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-
-        .submit-btn.expense {
-          background: var(--color-expense);
-        }
-
-        .submit-btn.income {
-          background: var(--color-income);
-        }
-
-        .submit-btn.transfer {
-          background: var(--color-accent);
-        }
-
-        .submit-btn.repayment {
-          background: #10b981;
-        }
-
-        .submit-btn:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-        }
-
-        /* 數字鍵盤 Modal */
-        .numpad-overlay {
-          position: fixed;
-          inset: 0;
-          background: rgba(0, 0, 0, 0.5);
-          display: flex;
-          align-items: flex-end;
-          justify-content: center;
-          z-index: 100;
-          animation: fadeIn 0.15s ease-out;
-        }
-
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-
-        .numpad-modal {
-          width: 100%;
-          max-width: 400px;
-          background: var(--bg-primary);
-          border-radius: 24px 24px 0 0;
-          padding: 20px 20px 100px 20px;
-          animation: slideUp 0.2s ease-out;
-        }
-
-        @keyframes slideUp {
-          from { transform: translateY(100%); }
-          to { transform: translateY(0); }
-        }
-
-        .numpad-display {
-          text-align: center;
-          padding: 20px;
-          margin-bottom: 16px;
-        }
-
-        .numpad-sign {
-          font-size: 1.5rem;
-          color: var(--text-secondary);
-        }
-
-        .numpad-amount {
-          font-size: 3rem;
-          font-weight: 700;
-          color: var(--text-primary);
-          font-variant-numeric: tabular-nums;
-        }
-
-        .numpad-grid {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 10px;
-          margin-bottom: 16px;
-        }
-
-        .numpad-key {
-          height: 60px;
-          border: none;
-          border-radius: 12px;
-          background: var(--bg-secondary);
-          color: var(--text-primary);
-          font-size: 1.5rem;
-          font-weight: 500;
-          cursor: pointer;
-          transition: background 0.1s;
-        }
-
-        .numpad-key:active {
-          background: var(--bg-hover);
-        }
-
-        .numpad-confirm {
-          width: 100%;
-          padding: 16px;
-          border: none;
-          border-radius: 12px;
-          background: var(--color-accent);
-          color: white;
-          font-size: 1.1rem;
-          font-weight: 600;
-          cursor: pointer;
-        }
+        .repayment-info { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 20px; background: var(--bg-secondary); border-radius: 12px; margin-bottom: 16px; border: 1px dashed var(--border-medium); }
+        .repayment-text { font-size: 0.85rem; color: var(--text-secondary); text-align: center; }
+
+        .amount-card { background: var(--bg-secondary); border-radius: 16px; padding: 24px; text-align: center; cursor: pointer; margin-bottom: 20px; border: 2px solid transparent; transition: all 0.2s; }
+        .amount-card:hover { border-color: var(--border-medium); }
+        .amount-card.expense .amount-value { color: var(--color-expense); }
+        .amount-card.income .amount-value { color: var(--color-income); }
+        .amount-card.transfer .amount-value { color: var(--color-accent); }
+        .amount-card.repayment .amount-value { color: #10b981; }
+        .amount-label { font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 8px; }
+        .amount-value { font-size: 2.5rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+        .amount-sign { font-size: 1.5rem; opacity: 0.7; }
+        .amount-currency { font-size: 1.5rem; margin-right: 2px; }
+        .amount-tap-hint { font-size: 0.75rem; color: var(--text-tertiary); margin-top: 8px; }
+
+        .quick-options { margin-bottom: 20px; }
+
+        .category-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }
+        .category-item { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 8px; border: none; border-radius: 12px; background: var(--bg-secondary); color: var(--text-primary); cursor: pointer; transition: all 0.2s; }
+        .category-item.selected { background: var(--color-accent); color: white; }
+        .quick-options.expense .category-item.selected { background: var(--color-expense); }
+        .quick-options.income .category-item.selected { background: var(--color-income); }
+        .category-icon { font-size: 1.25rem; }
+        .category-name { font-size: 0.75rem; }
+
+        .section-label { font-size: 0.8rem; font-weight: 500; color: var(--text-secondary); margin-bottom: 10px; margin-top: 8px; padding-left: 4px; }
+
+        .account-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px; }
+        .account-card { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 8px; border: none; border-radius: 12px; background: var(--bg-secondary); cursor: pointer; transition: all 0.2s; }
+        .account-card.selected { background: var(--color-accent); }
+        .quick-options.expense .account-card.selected { background: rgba(239, 68, 68, 0.2); border: 1px solid var(--color-expense); }
+        .quick-options.expense .account-card.selected .account-card-name { color: var(--color-expense); }
+        .quick-options.expense .account-card.selected .account-card-balance { color: var(--color-expense); opacity: 0.8; }
+        .quick-options.transfer .account-card.selected { background: rgba(59, 130, 246, 0.2); border: 1px solid var(--color-accent); }
+        .quick-options.transfer .account-card.selected .account-card-name { color: var(--color-accent); }
+        .quick-options.transfer .account-card.selected .account-card-balance { color: var(--color-accent); opacity: 0.8; }
+        .quick-options.income .account-card.selected { background: rgba(34, 197, 94, 0.2); border: 1px solid var(--color-income); }
+        .quick-options.income .account-card.selected .account-card-name { color: var(--color-income); }
+        .quick-options.income .account-card.selected .account-card-balance { color: var(--color-income); opacity: 0.8; }
+        .account-card-name { font-size: 0.85rem; font-weight: 600; color: var(--text-primary); }
+        .account-card.selected .account-card-name { color: white; }
+        .account-card-balance { font-size: 0.7rem; color: var(--text-secondary); }
+        .account-card.selected .account-card-balance { color: rgba(255, 255, 255, 0.8); }
+
+        .account-row { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; background: var(--bg-secondary); border-radius: 12px; margin-bottom: 12px; cursor: pointer; border-left: 4px solid var(--color-accent); }
+        .account-label { color: var(--text-primary); font-size: 0.9rem; font-weight: 500; }
+        .account-value { color: var(--color-accent); font-weight: 600; }
+        .account-dropdown { background: var(--bg-primary); border: 1px solid var(--border-light); border-radius: 12px; margin-bottom: 12px; overflow: hidden; }
+        .account-option { display: flex; justify-content: space-between; padding: 14px 16px; cursor: pointer; transition: background 0.15s; }
+        .account-option:hover { background: var(--bg-hover); }
+        .account-option.selected { background: var(--bg-hover); }
+        .account-balance { color: var(--text-secondary); font-size: 0.85rem; }
+
+        .transfer-sub-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+        .transfer-sub-tab { flex: 1; padding: 10px 12px; border: 1px solid var(--border-light); border-radius: 10px; background: transparent; color: var(--text-secondary); font-size: 0.85rem; cursor: pointer; transition: all 0.2s; }
+        .transfer-sub-tab.active { background: var(--color-accent); border-color: var(--color-accent); color: white; }
+
+        .transfer-accounts { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+        .transfer-account { flex: 1; padding: 14px; background: var(--bg-secondary); border-radius: 12px; text-align: center; cursor: pointer; }
+        .transfer-label { font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 4px; }
+        .transfer-name { font-weight: 500; color: var(--text-primary); }
+        .transfer-arrow { color: var(--text-tertiary); font-size: 1.2rem; }
+
+        .split-payment-section { background: var(--bg-secondary); border-radius: 12px; margin-bottom: 12px; margin-top: 12px; overflow: hidden; }
+        .split-toggle-row { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; cursor: pointer; }
+        .split-label { font-size: 0.9rem; color: var(--text-primary); font-weight: 500; }
+        .toggle-switch { width: 44px; height: 24px; background: var(--border-medium); border-radius: 12px; position: relative; transition: background 0.2s; }
+        .toggle-switch.active { background: var(--color-accent); }
+        .quick-options.expense .toggle-switch.active { background: var(--color-expense); }
+        .toggle-knob { width: 20px; height: 20px; background: white; border-radius: 50%; position: absolute; top: 2px; left: 2px; transition: transform 0.2s; }
+        .toggle-switch.active .toggle-knob { transform: translateX(20px); }
+        .split-options { padding: 0 16px 16px; border-top: 1px solid var(--border-light); }
+        .split-mode-tabs { display: flex; gap: 8px; margin: 12px 0; }
+        .split-mode-tab { flex: 1; padding: 8px 12px; border: 1px solid var(--border-light); border-radius: 8px; background: transparent; color: var(--text-secondary); font-size: 0.8rem; cursor: pointer; transition: all 0.2s; }
+        .split-mode-tab.active { background: var(--color-accent-bg); border-color: var(--color-accent); color: var(--color-accent); }
+        .quick-options.expense .split-mode-tab.active { background: rgba(239, 68, 68, 0.1); border-color: var(--color-expense); color: var(--color-expense); }
+        .people-selector { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        .people-label { font-size: 0.85rem; color: var(--text-secondary); }
+        .people-buttons { display: flex; gap: 6px; }
+        .people-btn { width: 36px; height: 36px; border: 1px solid var(--border-light); border-radius: 8px; background: transparent; color: var(--text-primary); font-size: 0.9rem; cursor: pointer; transition: all 0.2s; }
+        .people-btn.selected { background: var(--color-accent); border-color: var(--color-accent); color: white; }
+        .quick-options.expense .people-btn.selected { background: var(--color-expense); border-color: var(--color-expense); }
+        .custom-split-input { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
+        .custom-split-label { font-size: 0.85rem; color: var(--text-secondary); white-space: nowrap; }
+        .custom-split-input .note-input { flex: 1; margin: 0; }
+        .split-summary { background: var(--bg-primary); border-radius: 8px; padding: 12px; }
+        .split-summary-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 0.85rem; color: var(--text-secondary); }
+        .split-summary-row.highlight { border-top: 1px dashed var(--border-light); margin-top: 6px; padding-top: 12px; font-weight: 600; color: var(--text-primary); }
+        .split-total { color: var(--text-primary); }
+        .split-others { color: var(--color-accent); }
+        .split-own { color: var(--color-expense); font-size: 1rem; }
+
+        .name-suggestions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+        .suggestion-chip { padding: 6px 12px; border: 1px solid var(--border-light); border-radius: 16px; background: transparent; color: var(--text-secondary); font-size: 0.8rem; cursor: pointer; transition: all 0.2s; }
+        .suggestion-chip.selected { background: var(--color-accent-bg); border-color: var(--color-accent); color: var(--color-accent); }
+        .quick-options.expense .suggestion-chip.selected { background: rgba(239, 68, 68, 0.1); border-color: var(--color-expense); color: var(--color-expense); }
+        .quick-options.income .suggestion-chip.selected { background: rgba(34, 197, 94, 0.1); border-color: var(--color-income); color: var(--color-income); }
+
+        .note-input { width: 100%; padding: 14px 16px; border: 1px solid var(--border-light); border-radius: 12px; background: var(--bg-primary); color: var(--text-primary); font-size: 0.9rem; }
+        .note-input::placeholder { color: var(--text-tertiary); }
+
+        .submit-btn { width: 100%; padding: 16px; border: none; border-radius: 12px; font-size: 1rem; font-weight: 600; color: white; cursor: pointer; transition: all 0.2s; }
+        .submit-btn.expense { background: var(--color-expense); }
+        .submit-btn.income { background: var(--color-income); }
+        .submit-btn.transfer { background: var(--color-accent); }
+        .submit-btn.repayment { background: #10b981; }
+        .submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .numpad-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5); display: flex; align-items: flex-end; justify-content: center; z-index: 100; animation: fadeIn 0.15s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .numpad-modal { width: 100%; max-width: 400px; background: var(--bg-primary); border-radius: 24px 24px 0 0; padding: 20px 20px 100px 20px; animation: slideUp 0.2s ease-out; }
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        .numpad-display { text-align: center; padding: 20px; margin-bottom: 16px; }
+        .numpad-sign { font-size: 1.5rem; color: var(--text-secondary); }
+        .numpad-amount { font-size: 3rem; font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+        .numpad-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
+        .numpad-key { height: 60px; border: none; border-radius: 12px; background: var(--bg-secondary); color: var(--text-primary); font-size: 1.5rem; font-weight: 500; cursor: pointer; transition: background 0.1s; }
+        .numpad-key:active { background: var(--bg-hover); }
+        .numpad-confirm { width: 100%; padding: 16px; border: none; border-radius: 12px; background: var(--color-accent); color: white; font-size: 1.1rem; font-weight: 600; cursor: pointer; }
       `}</style>
     </div>
   );

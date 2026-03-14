@@ -1,59 +1,37 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import { useAuthFetch } from '@/hooks/useAuthFetch';
-import type { Transaction, Account } from '@/types';
+import { useTransactions } from '@/hooks/useTransactions';
+import { useAccounts } from '@/hooks/useAccounts';
+import type { Transaction } from '@/types';
 import { TransactionList } from '@/components/TransactionList';
 
 type TransactionFilter = 'all' | 'expense' | 'income' | 'transfer';
 
 export default function TransactionsPage() {
   const authFetch = useAuthFetch();
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<TransactionFilter>('all');
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
 
-  // 載入資料
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [year, month] = selectedMonth.split('-').map(Number);
-      const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-      const lastDay = new Date(year, month, 0).getDate();
-      const endDate = `${year}-${String(month).padStart(2, '0')}-${lastDay}`;
+  const [year, month] = selectedMonth.split('-').map(Number);
 
-      const [txRes, accRes] = await Promise.all([
-        authFetch(`/api/transactions?startDate=${startDate}&endDate=${endDate}`),
-        authFetch('/api/accounts'),
-      ]);
+  const { transactions, isLoading: txLoading, mutate: mutateTransactions } = useTransactions(year, month);
+  const { accounts, isLoading: accLoading, mutate: mutateAccounts } = useAccounts();
 
-      const txData = await txRes.json();
-      const accData = await accRes.json();
+  const loading = txLoading || accLoading;
 
-      if (txData.success) {
-        setTransactions(txData.data);
-      }
-      if (accData.success) {
-        setAccounts(accData.data);
-      }
-    } catch (error) {
-      console.error('Failed to load data:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedMonth, authFetch]);
-
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
-
-  // 更新交易
+  // 更新交易（樂觀更新）
   const handleUpdate = async (transaction: Transaction) => {
+    // 樂觀更新：立即更新本地快取
+    const optimisticData = transactions.map(tx =>
+      tx.id === transaction.id ? { ...tx, ...transaction } : tx
+    );
+    mutateTransactions(optimisticData, false);
+
     try {
       const res = await authFetch('/api/transactions', {
         method: 'PUT',
@@ -62,31 +40,43 @@ export default function TransactionsPage() {
       });
       const data = await res.json();
       if (data.success) {
-        loadData();
+        mutateTransactions(); // 背景重新驗證
+        mutateAccounts();     // 帳戶餘額可能變更
       } else {
+        mutateTransactions(); // 回滾
         alert('更新失敗：' + data.error);
       }
     } catch (error) {
+      mutateTransactions(); // 回滾
       console.error('Failed to update:', error);
       alert('更新失敗');
     }
   };
 
-  // 刪除交易
+  // 刪除交易（樂觀更新）
   const handleDelete = async (id: string) => {
     if (!confirm('確定要刪除這筆交易記錄嗎？')) return;
-    
+
+    // 樂觀更新：立即從快取移除
+    mutateTransactions(
+      transactions.filter(tx => tx.id !== id),
+      false
+    );
+
     try {
       const res = await authFetch(`/api/transactions?id=${id}`, {
         method: 'DELETE',
       });
       const data = await res.json();
       if (data.success) {
-        loadData();
+        mutateTransactions(); // 背景重新驗證
+        mutateAccounts();     // 帳戶餘額已變更
       } else {
+        mutateTransactions(); // 回滾
         alert('刪除失敗：' + data.error);
       }
     } catch (error) {
+      mutateTransactions(); // 回滾
       console.error('Failed to delete:', error);
       alert('刪除失敗');
     }
@@ -94,8 +84,8 @@ export default function TransactionsPage() {
 
   // 切換月份
   const changeMonth = (delta: number) => {
-    const [year, month] = selectedMonth.split('-').map(Number);
-    const newDate = new Date(year, month - 1 + delta, 1);
+    const [y, m] = selectedMonth.split('-').map(Number);
+    const newDate = new Date(y, m - 1 + delta, 1);
     setSelectedMonth(
       `${newDate.getFullYear()}-${String(newDate.getMonth() + 1).padStart(2, '0')}`
     );
@@ -125,16 +115,16 @@ export default function TransactionsPage() {
   return (
     <div className="animate-fade-in" style={{ paddingBottom: '80px' }}>
       <header style={{ marginBottom: '24px' }}>
-        <h1 style={{ 
-          fontSize: '1.5rem', 
+        <h1 style={{
+          fontSize: '1.5rem',
           fontWeight: 600,
           color: 'var(--text-primary)',
           margin: 0,
         }}>
           交易紀錄
         </h1>
-        <p style={{ 
-          fontSize: '0.875rem', 
+        <p style={{
+          fontSize: '0.875rem',
           color: 'var(--text-secondary)',
           marginTop: '4px',
         }}>
@@ -143,11 +133,11 @@ export default function TransactionsPage() {
       </header>
 
       {/* 月份選擇器 */}
-      <div 
+      <div
         className="card"
-        style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
+        style={{
+          display: 'flex',
+          alignItems: 'center',
           justifyContent: 'space-between',
           marginBottom: '20px',
           padding: '12px 16px',
@@ -173,15 +163,15 @@ export default function TransactionsPage() {
       </div>
 
       {/* 篩選按鈕 */}
-      <div style={{ 
-        display: 'flex', 
+      <div style={{
+        display: 'flex',
         gap: '8px',
         marginBottom: '16px',
       }}>
         <button
           onClick={() => setFilter('all')}
           className={`btn ${filter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
-          style={{ 
+          style={{
             flex: 1,
             padding: '8px 12px',
             fontSize: '0.8125rem',
@@ -192,7 +182,7 @@ export default function TransactionsPage() {
         <button
           onClick={() => setFilter('expense')}
           className={`btn ${filter === 'expense' ? 'btn-primary' : 'btn-secondary'}`}
-          style={{ 
+          style={{
             flex: 1,
             padding: '8px 12px',
             fontSize: '0.8125rem',
@@ -203,7 +193,7 @@ export default function TransactionsPage() {
         <button
           onClick={() => setFilter('income')}
           className={`btn ${filter === 'income' ? 'btn-primary' : 'btn-secondary'}`}
-          style={{ 
+          style={{
             flex: 1,
             padding: '8px 12px',
             fontSize: '0.8125rem',
@@ -214,7 +204,7 @@ export default function TransactionsPage() {
         <button
           onClick={() => setFilter('transfer')}
           className={`btn ${filter === 'transfer' ? 'btn-primary' : 'btn-secondary'}`}
-          style={{ 
+          style={{
             flex: 1,
             padding: '8px 12px',
             fontSize: '0.8125rem',
@@ -226,8 +216,8 @@ export default function TransactionsPage() {
 
       {/* 交易列表 */}
       {loading ? (
-        <div style={{ 
-          textAlign: 'center', 
+        <div style={{
+          textAlign: 'center',
           padding: '40px',
           color: 'var(--text-tertiary)',
         }}>
@@ -235,8 +225,8 @@ export default function TransactionsPage() {
         </div>
       ) : (
         <>
-          <div style={{ 
-            fontSize: '0.875rem', 
+          <div style={{
+            fontSize: '0.875rem',
             color: 'var(--text-secondary)',
             marginBottom: '12px',
           }}>
@@ -253,4 +243,3 @@ export default function TransactionsPage() {
     </div>
   );
 }
-
